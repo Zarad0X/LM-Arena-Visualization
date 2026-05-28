@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.venv/
+.DS_Store
+
+# Raw downloaded datasets are reproducible and should not be committed.
+data/raw/
