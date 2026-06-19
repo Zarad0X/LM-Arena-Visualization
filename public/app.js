@@ -308,6 +308,7 @@ function getActiveKey() {
   if (state.brushOrgs && state.brushOrgs.size) return { type: "orgset", value: state.brushOrgs };
   if (state.focusModel) return { type: "model", value: state.focusModel };
   if (state.focusOrg) return { type: "org", value: state.focusOrg };
+  if (state.organization !== "all") return { type: "org", value: state.organization };
   return null;
 }
 
