@@ -47,6 +47,7 @@ const race = {
   frame: 0, // current index into dates
   timer: null, // setInterval handle while playing
   playing: false,
+  key: null, // "arena|category|rankLimit" of the currently-built race (rebuild guard)
 };
 
 const data = {
@@ -116,6 +117,7 @@ function cacheElements() {
     "leaderboardChart",
     "leaderboardTable",
     "raceChart",
+    "raceWatermark",
     "racePlay",
     "raceScrub",
     "raceSpeed",
@@ -1011,11 +1013,20 @@ function animateNumber(node, target, { decimals = 0, duration = 700 } = {}) {
 const RACE_MAX = 20; // legibility cap for the race's fixed height
 
 function renderRace() {
+  // The race depends only on arena / category / rankLimit — NOT on the org
+  // filter, focus, brush, or search. Rebuilding it on those interactions
+  // cleared the drop-shadow-filtered SVG nodes mid-interaction (which left a
+  // compositor ghost) and also restarted playback. Skip the rebuild when the
+  // inputs are unchanged; applyLinking() still updates focus/dim on the
+  // existing rows, so linked highlighting keeps working without a rebuild.
+  const key = `${state.arena}|${state.category}|${state.rankLimit}`;
+  if (race.key === key && race.rowEls && race.rowEls.size) return;
+  race.key = key;
+
   stopRace();
   const svg = els.raceChart;
   clear(svg);
   race.rowEls = new Map();
-  race.watermark = null;
   race.n = clamp(state.rankLimit, 5, RACE_MAX); // follow the "Rank Top" control
 
   const rows = data.rankSeries.filter((d) => d.arena === state.arena && d.category === state.category);
@@ -1095,15 +1106,9 @@ function drawRaceFrame() {
   els.raceDate.textContent = shortDate(date);
   els.raceScrub.value = race.frame;
 
-  // giant translucent date watermark behind the bars — the signature race motif
-  if (!race.watermark) {
-    const wm = svgEl("text", { class: "race-watermark", "text-anchor": "end" });
-    svg.insertBefore(wm, svg.firstChild);
-    race.watermark = wm;
-  }
-  race.watermark.textContent = shortDate(date);
-  race.watermark.setAttribute("x", margin.left + innerW);
-  race.watermark.setAttribute("y", margin.top + (race.n * rowH) / 2 + 30);
+  // giant translucent date behind the bars — an HTML layer (see styles.css) so
+  // it can't leave an SVG repaint ghost when the scatter brush rect is removed
+  if (els.raceWatermark) els.raceWatermark.textContent = shortDate(date);
 
   const present = new Set();
   frameRows.forEach((d, i) => {
@@ -1138,7 +1143,7 @@ function drawRaceFrame() {
       g.style.transform = `translateY(${y}px)`;
     }
     const lead = i === 0;
-    row.g.style.opacity = "1";
+    row.g.classList.remove("race-gone");
     row.g.style.transform = `translateY(${y}px)`;
     row.bar.setAttribute("width", barW);
     row.bar.setAttribute("fill", fill);
@@ -1153,9 +1158,12 @@ function drawRaceFrame() {
     row.value.setAttribute("y", barH / 2 + 4);
   });
 
-  // models that dropped out of the top N fade away
+  // models that dropped out of the top N fade away. Use a class (not inline
+  // opacity) so the `.race-row.race-gone` rule can override `.race-row.is-dim`
+  // — otherwise hovering/dimming (which sets opacity:1 to avoid ghosting) would
+  // un-hide every dropped-out row and they would pile up at their old positions.
   race.rowEls.forEach((row, model) => {
-    if (!present.has(model)) row.g.style.opacity = "0";
+    if (!present.has(model)) row.g.classList.add("race-gone");
   });
 
   applyLinking();

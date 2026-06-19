@@ -315,23 +315,31 @@ h2 {
   background: linear-gradient(90deg, transparent, rgba(var(--accent-rgb), 0.85), transparent);
 }
 
-/* slow light-sheen sweeping across the champion card */
+/* champion card: a slow light sheen sweeping across (signature flourish) */
+.hero-headline > * {
+  position: relative;
+  z-index: 1;
+}
+
 .hero-headline::before {
   content: "";
   position: absolute;
-  top: 0;
-  left: -60%;
-  width: 42%;
-  height: 100%;
-  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.09), transparent);
-  transform: skewX(-18deg);
-  animation: sheen 7s ease-in-out infinite;
+  top: -20%;
+  left: -35%;
+  width: 26%;
+  height: 140%;
+  z-index: 0;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  transform: translateX(0) skewX(-16deg);
+  animation: hero-sheen 7s ease-in-out infinite;
   pointer-events: none;
 }
 
-@keyframes sheen {
-  0%, 74% { left: -60%; }
-  100% { left: 135%; }
+@keyframes hero-sheen {
+  0% { transform: translateX(0) skewX(-16deg); opacity: 0; }
+  9% { opacity: 1; }
+  32% { transform: translateX(640%) skewX(-16deg); opacity: 0; }
+  100% { transform: translateX(640%) skewX(-16deg); opacity: 0; }
 }
 
 .hero-headline .hero-kicker {
@@ -1501,17 +1509,34 @@ button.mini-row:hover {
   font-weight: 700;
 }
 
-/* giant translucent date behind the racing bars */
+/* giant translucent date behind the racing bars (the signature race motif).
+   Rendered as an HTML layer behind the transparent SVG — NOT an SVG <text> —
+   because a huge translucent SVG text node left a Chromium repaint ghost of the
+   just-removed scatter brush rectangle inside its bounding box. */
+.t-race .chart-wrap {
+  position: relative;
+}
+
+#raceChart {
+  position: relative;
+  z-index: 1;
+}
+
 .race-watermark {
-  fill: rgba(25, 240, 216, 0.09);
-  font-size: 104px;
+  position: absolute;
+  right: 22px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 0;
+  margin: 0;
+  color: rgba(25, 240, 216, 0.1);
+  font-size: clamp(54px, 7vw, 116px);
   font-weight: 900;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-  paint-order: stroke;
-  stroke: rgba(25, 240, 216, 0.14);
-  stroke-width: 1px;
+  letter-spacing: 0.02em;
+  line-height: 1;
   pointer-events: none;
+  user-select: none;
 }
 
 /* rank badge sitting inside the left end of each bar */
@@ -1528,6 +1553,31 @@ button.mini-row:hover {
   font-size: 12px;
   font-weight: 760;
   font-variant-numeric: tabular-nums;
+}
+
+/* Linked-highlight dimming for the race must NOT use the generic opacity dim:
+   the rows animate their position, and semi-transparent rows let you see THROUGH
+   the overlaps mid-transition (ghosting / 重影). Instead keep dimmed rows fully
+   opaque and grey them out — opaque bars occlude cleanly while they slide, so
+   highlighting works without the ghost (during brushing, hover, and playback). */
+.race-row.is-dim {
+  opacity: 1 !important;
+}
+
+.race-row.is-dim rect {
+  fill: #2a3039 !important;
+  filter: none !important;
+}
+
+.race-row.is-dim text {
+  opacity: 0.26;
+}
+
+/* dropped-out rows stay hidden even while dimmed — this rule comes after the
+   is-dim rules so it wins the specificity tie and opacity:1 can't reveal them */
+.race-row.race-gone {
+  opacity: 0 !important;
+  pointer-events: none;
 }
 
 .race-speed {
