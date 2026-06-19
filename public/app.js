@@ -8,19 +8,20 @@ const DATA_PATHS = {
   profiles: "./data/model_profiles_latest.json",
 };
 
+// high-contrast neon — palette[0]/[1] mirror CSS --accent / --accent-2
 const palette = [
-  "#22d3ee",
-  "#ff7849",
-  "#34d399",
-  "#a78bfa",
-  "#fbbf24",
-  "#fb5c7d",
-  "#60a5fa",
-  "#f472b6",
-  "#4ade80",
-  "#facc15",
-  "#38bdf8",
-  "#c084fc",
+  "#19f0d8",
+  "#ff6b3d",
+  "#66f08a",
+  "#b388ff",
+  "#ffcf4a",
+  "#ff5470",
+  "#3da5ff",
+  "#ff79c6",
+  "#5af0c8",
+  "#ffd93d",
+  "#33d6ff",
+  "#c77dff",
 ];
 
 const state = {
@@ -598,7 +599,10 @@ function renderArenaBars() {
 
     text(svg, margin.left - 10, y + 10, d.arena, isCurrent ? "chart-label selected-label" : "chart-label", "end");
     rect(svg, margin.left, y + 3, snapW, barH, "rgba(255,255,255,0.08)", 4);
-    tagMark(rect(svg, margin.left, y + 3, modelW, barH, getColor(d.arena), 4), { arena: d.arena });
+    const aBar = tagMark(rect(svg, margin.left, y + 3, modelW, barH, barGradient(svg, getColor(d.arena)), 4), {
+      arena: d.arena,
+    });
+    if (isCurrent) aBar.style.filter = `drop-shadow(0 0 6px ${getColor(d.arena)})`;
     text(svg, margin.left + modelW + 8, y + 11, formatNumber(d.model_count_latest), "minor-label");
 
     const hit = tagMark(rect(svg, margin.left, y - 3, innerW, 20, "transparent", 0), { arena: d.arena });
@@ -714,6 +718,11 @@ function renderTimeline() {
     const color = getColor(s.arena);
     const baseOpacity = isCurrent ? 1 : dim ? 0.16 : 0.55;
     const pts = s.rows.map((r) => [xOf(new Date(r.leaderboard_publish_date).getTime()), yOf(r.total_votes)]);
+    // glowing gradient area beneath the currently-focused arena's line
+    if (isCurrent && pts.length > 1) {
+      const areaD = `${linePath(pts)} L${pts[pts.length - 1][0].toFixed(2)},${plotBottom} L${pts[0][0].toFixed(2)},${plotBottom} Z`;
+      path(svg, areaD, areaGradient(svg, color), "none", 0).style.pointerEvents = "none";
+    }
     // "hammer" stem: a dashed drop line from the arena's first snapshot down to
     // the baseline, so a line that debuts mid-chart still shows where it begins
     const [sx, sy] = pts[0];
@@ -721,11 +730,12 @@ function renderTimeline() {
     stem.setAttribute("stroke-opacity", isCurrent ? 0.7 : dim ? 0.12 : 0.3);
     stem.setAttribute("stroke-dasharray", "2 3");
     stem.style.pointerEvents = "none";
-    const startDot = circle(svg, sx, sy, isCurrent ? 4 : dim ? 2 : 2.8, color, "#0b1120", 1.2);
+    const startDot = circle(svg, sx, sy, isCurrent ? 4 : dim ? 2 : 2.8, color, "#0a0b0e", 1.2);
     startDot.style.pointerEvents = "none";
     if (dim) startDot.setAttribute("opacity", 0.5);
     const p = tagMark(path(svg, linePath(pts), "", color, isCurrent ? 3 : dim ? 1.1 : 1.6), { arena: s.arena });
     p.setAttribute("stroke-opacity", baseOpacity);
+    if (isCurrent) p.style.filter = `drop-shadow(0 0 6px ${color})`;
     p.style.cursor = "pointer";
     p.addEventListener("click", () => switchArena(s.arena));
     const last = s.rows[s.rows.length - 1];
@@ -763,7 +773,7 @@ function renderTimeline() {
     const ly = Math.max(s.endY, prevY + 12);
     prevY = ly;
     const lx = margin.left + innerW + 8;
-    circle(svg, s.endX, s.endY, s.isCurrent ? 3.5 : 2.5, s.color, "#0b1120", 1).setAttribute(
+    circle(svg, s.endX, s.endY, s.isCurrent ? 3.5 : 2.5, s.color, "#0a0b0e", 1).setAttribute(
       "opacity",
       s.dim ? 0.5 : 1,
     );
@@ -795,7 +805,7 @@ function renderLeaderboard() {
 
 function renderLeaderboardChart(rows) {
   const svg = setupSvg(els.leaderboardChart);
-  const margin = { top: 20, right: 44, bottom: 38, left: 210 };
+  const margin = { top: 20, right: 48, bottom: 38, left: 252 };
   const width = svg.clientWidth || 920;
   const rowH = 26;
   const height = Math.max(340, rows.length * rowH + margin.top + margin.bottom);
@@ -814,6 +824,14 @@ function renderLeaderboardChart(rows) {
 
   drawXScale(svg, margin, width, height, minRating, maxRating, 5, (v) => Math.round(v));
 
+  // left gutter: a fixed left-aligned rank column + an adaptive-width model
+  // name (right-aligned against the bars). fitText guarantees the name never
+  // collides with the rank column no matter how long the model name is.
+  const RANK_X = 16;
+  const NAME_RIGHT = margin.left - 14;
+  const NAME_LEFT_BOUND = 66; // right edge of rank column + breathing gap
+  const medalColors = ["#ffcf4a", "#d3dae6", "#e08a52"];
+
   rows.forEach((d, i) => {
     const y = margin.top + i * rowH + rowH / 2;
     const x = margin.left + scale(d.rating, minRating, maxRating, 0, innerW);
@@ -821,17 +839,27 @@ function renderLeaderboardChart(rows) {
     const xHigh = margin.left + scale(d.rating_upper ?? d.rating, minRating, maxRating, 0, innerW);
     const color = getColor(d.organization || "unknown");
     const org = d.organization || "unknown";
-    const label = truncate(d.model_name, width < 720 ? 22 : 32);
 
-    text(svg, margin.left - 40, y + 4, `#${formatRank(d.rank)}`, "minor-label", "end");
-    tagMark(text(svg, margin.left - 12, y + 4, label, "chart-label", "end"), { model: d.model_name, org });
-    tagMark(line(svg, xLow, y, xHigh, y, "", color, 2, "round"), { model: d.model_name, org });
+    // leader row gets a faint neon band so the #1 reads as the headline
+    if (i === 0) {
+      const band = rect(svg, 6, y - rowH / 2 + 2, width - margin.right - 6, rowH - 4, "rgba(25,240,216,0.07)", 7);
+      band.style.pointerEvents = "none";
+    }
+
+    const rk = text(svg, RANK_X, y + 4, `#${formatRank(d.rank)}`, "lb-rank", "start");
+    if (medalColors[i]) rk.setAttribute("fill", medalColors[i]);
+    fitText(
+      tagMark(text(svg, NAME_RIGHT, y + 4, d.model_name, "chart-label", "end"), { model: d.model_name, org }),
+      NAME_RIGHT - NAME_LEFT_BOUND,
+    );
+    tagMark(line(svg, xLow, y, xHigh, y, "", color, 2.4, "round"), { model: d.model_name, org });
     circle(svg, xLow, y, 3, "#fff", color);
     circle(svg, xHigh, y, 3, "#fff", color);
     const dot = tagMark(
       circle(svg, x, y, scale(Math.sqrt(d.vote_count || 0), 0, Math.sqrt(maxVotes || 1), 4, 11), color, "#fff", 1.3),
       { model: d.model_name, org },
     );
+    dot.style.filter = `drop-shadow(0 0 5px ${color})`;
     dot.style.cursor = "pointer";
     dot.addEventListener("click", () => setFocusModel(d.model_name));
     dot.addEventListener("mouseenter", (event) =>
@@ -890,12 +918,26 @@ function renderHero() {
   const org = champ.organization || "unknown";
   const lead = runnerUp ? champ.rating - runnerUp.rating : 0;
 
+  // rating move vs the previous snapshot (the top-N rank series always carries #1)
+  const champSeries = data.rankSeries
+    .filter((d) => d.arena === state.arena && d.category === state.category && d.model_name === champ.model_name)
+    .sort((a, b) => new Date(a.leaderboard_publish_date) - new Date(b.leaderboard_publish_date));
+  let deltaBadge = "";
+  if (champSeries.length >= 2) {
+    const dr = champSeries[champSeries.length - 1].rating - champSeries[champSeries.length - 2].rating;
+    if (Math.abs(dr) >= 0.05) {
+      const up = dr >= 0;
+      deltaBadge = `<span class="champ-delta ${up ? "up" : "down"}">${up ? "▲" : "▼"} ${formatDecimal(Math.abs(dr))}</span>`;
+    }
+  }
+
   els.heroKicker.textContent = `当前榜首 · ${state.arena} / ${state.category}`;
   els.heroChampion.innerHTML = `
     <span class="crown">👑</span>
     <span class="champ-name">${escapeHtml(champ.model_name)}</span>
     <span class="champ-org">${escapeHtml(org)} · ${escapeHtml(champ.license || "unknown")}</span>
     <span class="champ-rating"><b data-count="${champ.rating}" data-decimals="0">0</b>
+      ${deltaBadge}
       <em>Rating${runnerUp ? ` · 领先第二名 +${formatDecimal(lead)}` : ""}</em></span>
   `;
   els.heroChampion.style.cursor = "pointer";
@@ -973,6 +1015,7 @@ function renderRace() {
   const svg = els.raceChart;
   clear(svg);
   race.rowEls = new Map();
+  race.watermark = null;
   race.n = clamp(state.rankLimit, 5, RACE_MAX); // follow the "Rank Top" control
 
   const rows = data.rankSeries.filter((d) => d.arena === state.arena && d.category === state.category);
@@ -1006,16 +1049,13 @@ function renderRace() {
   race.byDate = byDate;
   race.frame = dates.length - 1; // start parked at the latest snapshot
 
-  // stable x-domain across all frames so motion reads as racing, not rescaling
-  let lo = Infinity;
-  let hi = -Infinity;
+  // each frame only carries as many models as the precomputed top series holds
+  // (10) — shrink race.n to the real count so the chart has no empty rows
+  let maxLen = 0;
   byDate.forEach((arr) => {
-    arr.forEach((d) => {
-      if (d.rating < lo) lo = d.rating;
-      if (d.rating > hi) hi = d.rating;
-    });
+    if (arr.length > maxLen) maxLen = arr.length;
   });
-  race.domain = [lo - 12, hi + 8];
+  if (maxLen) race.n = Math.min(race.n, maxLen);
 
   els.raceScrub.max = dates.length - 1;
   els.raceScrub.value = race.frame;
@@ -1039,18 +1079,39 @@ function drawRaceFrame() {
   const date = race.dates[race.frame];
   const frameRows = race.byDate.get(date) || [];
   const { svg, margin, innerW, rowH } = raceGeom();
-  const [dMin, dMax] = race.domain;
   const barH = Math.max(12, rowH * 0.62);
+
+  // Per-frame domain: every frame fills the width so length differences stay
+  // legible (a single stable scale squashes the dense modern frames into a wall
+  // of near-equal bars). Smooth width transitions + value labels + the big date
+  // watermark carry the absolute progression as the race plays.
+  const ratings = frameRows.map((d) => d.rating);
+  const dMax = ratings.length ? Math.max(...ratings) : 1;
+  const dMin = ratings.length ? Math.min(...ratings) : 0;
+  const pad = Math.max(8, (dMax - dMin) * 0.28);
+  const domLo = dMin - pad;
+  const domHi = dMax + pad * 0.45;
 
   els.raceDate.textContent = shortDate(date);
   els.raceScrub.value = race.frame;
+
+  // giant translucent date watermark behind the bars — the signature race motif
+  if (!race.watermark) {
+    const wm = svgEl("text", { class: "race-watermark", "text-anchor": "end" });
+    svg.insertBefore(wm, svg.firstChild);
+    race.watermark = wm;
+  }
+  race.watermark.textContent = shortDate(date);
+  race.watermark.setAttribute("x", margin.left + innerW);
+  race.watermark.setAttribute("y", margin.top + (race.n * rowH) / 2 + 30);
 
   const present = new Set();
   frameRows.forEach((d, i) => {
     present.add(d.model);
     const y = margin.top + i * rowH;
-    const barW = Math.max(4, scale(d.rating, dMin, dMax, 6, innerW));
+    const barW = Math.max(6, scale(d.rating, domLo, domHi, 10, innerW));
     const color = getColor(d.org);
+    const fill = barGradient(svg, color);
     let row = race.rowEls.get(d.model);
     if (!row) {
       // build a persistent row group so the next frame can transition it
@@ -1058,31 +1119,37 @@ function drawRaceFrame() {
       g.style.transition = "transform 0.55s cubic-bezier(0.22,1,0.36,1), opacity 0.35s ease";
       tagMark(g, { model: d.model, org: d.org });
       g.style.cursor = "pointer";
-      const bar = svgEl("rect", { x: margin.left, y: 0, height: barH, rx: 7, fill: color });
-      bar.style.transition = "width 0.55s cubic-bezier(0.22,1,0.36,1), fill 0.3s ease";
+      const bar = svgEl("rect", { x: margin.left, y: 0, height: barH, rx: 7, fill });
+      bar.style.transition = "width 0.55s cubic-bezier(0.22,1,0.36,1)";
+      const badge = svgEl("text", { x: margin.left + 12, y: barH / 2 + 4, class: "race-rank-badge" });
       const label = svgEl("text", { x: margin.left - 12, y: barH / 2 + 4, class: "race-row-label", "text-anchor": "end" });
-      const value = svgEl("text", { x: margin.left + barW + 8, y: barH / 2 + 4, class: "race-row-value" });
+      const value = svgEl("text", { x: margin.left + barW + 10, y: barH / 2 + 4, class: "race-row-value" });
       g.appendChild(bar);
+      g.appendChild(badge);
       g.appendChild(label);
       g.appendChild(value);
       g.addEventListener("click", () => setFocusModel(d.model));
       linkHover(g, { type: "model", value: d.model });
       svg.appendChild(g);
-      row = { g, bar, label, value };
+      row = { g, bar, badge, label, value };
       race.rowEls.set(d.model, row);
       // start collapsed so the first appearance grows in
       bar.setAttribute("width", 0);
       g.style.transform = `translateY(${y}px)`;
     }
+    const lead = i === 0;
     row.g.style.opacity = "1";
     row.g.style.transform = `translateY(${y}px)`;
     row.bar.setAttribute("width", barW);
-    row.bar.setAttribute("fill", color);
+    row.bar.setAttribute("fill", fill);
     row.bar.setAttribute("height", barH);
+    row.bar.style.filter = `drop-shadow(0 0 ${lead ? 13 : 6}px ${color})`; // leader glows hardest
+    row.badge.textContent = `#${i + 1}`;
+    row.badge.setAttribute("y", barH / 2 + 4);
     row.label.textContent = truncate(d.model, 24);
     row.label.setAttribute("y", barH / 2 + 4);
     row.value.textContent = formatDecimal(d.rating);
-    row.value.setAttribute("x", margin.left + barW + 8);
+    row.value.setAttribute("x", margin.left + barW + 10);
     row.value.setAttribute("y", barH / 2 + 4);
   });
 
@@ -1129,11 +1196,11 @@ function toggleRacePlay() {
  * ============================================================ */
 
 function rankColor(rank) {
-  // 1 (strong, teal) -> 60+ (weak, red)
+  // 1 (strong, neon cyan) -> 60+ (weak, hot red)
   const t = clamp((rank - 1) / 59, 0, 1);
-  const a = [42, 157, 143]; // #2a9d8f
-  const b = [209, 73, 91]; // #d1495b
-  const mid = [233, 196, 106]; // #e9c46a
+  const a = [25, 240, 216]; // #19f0d8
+  const b = [255, 84, 112]; // #ff5470
+  const mid = [255, 207, 74]; // #ffcf4a
   const lerp = (x, y, k) => Math.round(x + (y - x) * k);
   let c;
   if (t < 0.5) {
@@ -1275,7 +1342,7 @@ function renderEvolution() {
 
   const margin = { top: 24, right: 184, bottom: 40, left: 48 };
   const width = svg.clientWidth || 1100;
-  const height = 340;
+  const height = 400;
   setViewBox(svg, width, height);
   clear(svg);
 
@@ -1444,17 +1511,17 @@ function renderOrganizations() {
     .sort((a, b) => a.best_rank - b.best_rank || b.unique_models - a.unique_models)
     .slice(0, 18);
 
-  els.orgScatterNote.textContent = `${state.arena}`;
-  els.orgBarsNote.textContent = `${rows.length} organizations`;
+  els.orgScatterNote.textContent = `${rows.length} 家 · ${state.arena}`;
+  els.orgBarsNote.textContent = `Top ${Math.min(12, rows.length)} / ${rows.length} 家`;
   renderOrgScatter(rows);
   renderOrgBars(rows);
 }
 
 function renderOrgScatter(rows) {
   const svg = setupSvg(els.orgScatter);
-  const margin = { top: 24, right: 30, bottom: 44, left: 52 };
+  const margin = { top: 24, right: 78, bottom: 44, left: 52 };
   const width = svg.clientWidth || 680;
-  const height = 300;
+  const height = 360;
   setViewBox(svg, width, height);
   clear(svg);
 
@@ -1483,13 +1550,15 @@ function renderOrgScatter(rows) {
   overlay.classList.add("brush-overlay");
   addScatterBrush(svg, { left: margin.left, top: margin.top, innerW, innerH, maxModels, maxRank, rows }, overlay);
 
-  rows.forEach((d) => {
+  // pass 1: draw bubbles, collect positions for label placement
+  const marks = rows.map((d) => {
     const org = d.organization || "unknown";
     const x = margin.left + scale(d.unique_models, 0, maxModels, 0, innerW);
     const y = margin.top + scale(d.best_rank, 1, maxRank, 0, innerH);
     const r = scale(Math.sqrt(d.total_votes || 0), 0, Math.sqrt(maxVotes || 1), 7, 22);
     const color = getColor(org);
     const dot = tagMark(circle(svg, x, y, r, color, "#fff", 1.5, 0.82), { org });
+    dot.style.filter = `drop-shadow(0 0 4px ${color})`;
     dot.style.cursor = "pointer";
     dot.addEventListener("click", () => setFocusOrg(org));
     dot.addEventListener("mouseenter", (event) =>
@@ -1502,8 +1571,43 @@ function renderOrgScatter(rows) {
     );
     dot.addEventListener("mouseleave", hideTooltip);
     linkHover(dot, { type: "org", value: org });
-    tagMark(text(svg, x + r + 4, y + 4, truncate(org, 14), "minor-label"), { org });
+    return { org, x, y, r };
   });
+
+  // pass 2: labels. Each carries a dark halo (paint-order stroke) so it stays
+  // legible even over a bubble. We measure the real label width and push a label
+  // down only when it actually overlaps an already-placed one (both axes) — this
+  // untangles the dense rank-#1 cluster without over-separating distant labels.
+  const placed = [];
+  const topEdge = margin.top + 4;
+  const bottomEdge = margin.top + innerH + 4;
+  marks
+    .map((m) => {
+      const onLeft = m.x > margin.left + innerW * 0.5;
+      return { m, anchor: onLeft ? "end" : "start", tx: onLeft ? m.x - m.r - 7 : m.x + m.r + 7, ty: m.y + 4 };
+    })
+    .sort((a, b) => a.ty - b.ty)
+    .forEach((l) => {
+      const t = fitText(tagMark(text(svg, l.tx, l.ty, l.m.org, "scatter-label", l.anchor), { org: l.m.org }), 104);
+      const w = t.getComputedTextLength();
+      const x0 = l.anchor === "end" ? l.tx - w : l.tx;
+      const x1 = x0 + w;
+      const overlaps = () =>
+        placed.some((p) => x0 < p.x1 + 5 && x1 > p.x0 - 5 && Math.abs(l.ty - p.ty) < 13);
+      let guard = 0;
+      while (overlaps() && l.ty < bottomEdge && guard < 60) {
+        l.ty += 4;
+        guard += 1;
+      }
+      l.ty = clamp(l.ty, topEdge, bottomEdge);
+      t.setAttribute("y", l.ty);
+      // leader line back to the bubble when the label was nudged away
+      if (Math.abs(l.ty - 4 - l.m.y) > 7) {
+        const edgeX = l.anchor === "end" ? l.m.x - l.m.r : l.m.x + l.m.r;
+        line(svg, edgeX, l.m.y, l.tx, l.ty - 4, "", "rgba(150,170,205,0.42)", 1).style.pointerEvents = "none";
+      }
+      placed.push({ x0, x1, ty: l.ty });
+    });
 
   drawAxisLabel(svg, margin.left + innerW / 2, height - 9, "unique models", "axis", "middle");
   drawAxisLabel(svg, margin.left, 18, "best rank", "axis");
@@ -1513,7 +1617,7 @@ function renderOrgBars(rows) {
   const svg = setupSvg(els.orgBars);
   const margin = { top: 16, right: 38, bottom: 28, left: 124 };
   const width = svg.clientWidth || 680;
-  const height = 300;
+  const height = 348;
   setViewBox(svg, width, height);
   clear(svg);
 
@@ -1529,13 +1633,15 @@ function renderOrgBars(rows) {
 
   sorted.forEach((d, i) => {
     const org = d.organization || "unknown";
+    const color = getColor(org);
     const y = margin.top + i * rowH;
     const barW = scale(d.unique_models, 0, maxModels, 0, innerW);
     tagMark(text(svg, margin.left - 10, y + rowH / 2 + 4, truncate(org, 16), "chart-label", "end"), { org });
     const bar = tagMark(
-      rect(svg, margin.left, y + rowH * 0.23, barW, Math.max(8, rowH * 0.54), getColor(org), 4),
+      rect(svg, margin.left, y + rowH * 0.23, barW, Math.max(8, rowH * 0.54), barGradient(svg, color), 4),
       { org },
     );
+    bar.style.filter = `drop-shadow(0 0 5px ${color})`;
     bar.style.cursor = "pointer";
     bar.addEventListener("click", () => setFocusOrg(org));
     bar.addEventListener("mouseenter", (event) =>
@@ -1763,6 +1869,9 @@ function setupSvg(svg) {
 
 function setViewBox(svg, width, height) {
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  // top-align content so a chart shorter than its (row-stretched) tile leaves
+  // the slack at the bottom instead of letterboxing a gap above the title row
+  svg.setAttribute("preserveAspectRatio", "xMidYMin meet");
   svg.style.minHeight = `${height}px`;
 }
 
@@ -1826,6 +1935,25 @@ function text(svg, x, y, content, className = "", anchor = "start") {
   return el;
 }
 
+// Trim an already-rendered SVG <text> with an ellipsis until it fits maxWidth
+// (px). Measures the real glyph width via getComputedTextLength, so it adapts
+// to any font / zoom / name length instead of guessing a character count.
+function fitText(el, maxWidth) {
+  if (!el || maxWidth <= 0) return el;
+  const full = el.textContent;
+  if (el.getComputedTextLength() <= maxWidth) return el;
+  let lo = 0;
+  let hi = full.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    el.textContent = `${full.slice(0, mid)}…`;
+    if (el.getComputedTextLength() <= maxWidth) lo = mid;
+    else hi = mid - 1;
+  }
+  el.textContent = lo > 0 ? `${full.slice(0, lo)}…` : "…";
+  return el;
+}
+
 function svgEl(name, attrs) {
   const el = document.createElementNS("http://www.w3.org/2000/svg", name);
   Object.entries(attrs).forEach(([key, value]) => {
@@ -1879,16 +2007,31 @@ function drawXAxisDates(svg, rows, margin, innerW, innerH, dateKey) {
 function drawXAxisDateTicks(svg, dates, margin, innerW, innerH) {
   const uniqueDates = unique(dates).sort();
   if (!uniqueDates.length) return;
-  const count = Math.min(6, uniqueDates.length);
   const minTime = new Date(uniqueDates[0]).getTime();
   const maxTime = new Date(uniqueDates[uniqueDates.length - 1]).getTime();
-  const chosen = [];
-  for (let i = 0; i < count; i += 1) {
-    const index = Math.round((i / Math.max(1, count - 1)) * (uniqueDates.length - 1));
-    chosen.push(uniqueDates[index]);
+  const span = Math.max(1, maxTime - minTime);
+  // Place ticks evenly in TIME (not by row index) so their x positions never
+  // bunch up, then snap each target to the nearest real snapshot date.
+  const target = clamp(Math.round(innerW / 110), 3, 6);
+  const picks = [];
+  for (let i = 0; i < target; i += 1) {
+    const t = minTime + (span * i) / (target - 1);
+    let nearest = uniqueDates[0];
+    let best = Infinity;
+    uniqueDates.forEach((dt) => {
+      const diff = Math.abs(new Date(dt).getTime() - t);
+      if (diff < best) {
+        best = diff;
+        nearest = dt;
+      }
+    });
+    picks.push(nearest);
   }
-  unique(chosen).forEach((date) => {
+  let lastX = -Infinity;
+  unique(picks).forEach((date) => {
     const x = margin.left + scale(new Date(date).getTime(), minTime, maxTime, 0, innerW);
+    if (x - lastX < 56) return; // drop a label that would collide with the previous
+    lastX = x;
     line(svg, x, margin.top, x, margin.top + innerH, "grid-line");
     text(svg, x, margin.top + innerH + 26, shortDate(date), "axis", "middle");
   });
@@ -1936,6 +2079,51 @@ function getColor(key) {
 
 function varColor(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+// Mix a hex color toward white by amt (0..1) -> "rgb(...)" string.
+function lighten(hex, amt = 0.4) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  const mix = (c) => Math.round(c + (255 - c) * amt);
+  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+}
+
+// One reusable horizontal gradient def per color (org color -> lighter tip),
+// created lazily inside the given svg's <defs>. Returns url(#id) for use as fill.
+function barGradient(svg, color) {
+  const id = `grad-${String(color).replace(/[^a-z0-9]/gi, "")}`;
+  if (svg.querySelector(`#${id}`)) return `url(#${id})`;
+  let defs = svg.querySelector("defs");
+  if (!defs) {
+    defs = svgEl("defs", {});
+    svg.insertBefore(defs, svg.firstChild);
+  }
+  const grad = svgEl("linearGradient", { id, x1: "0", y1: "0", x2: "1", y2: "0" });
+  grad.appendChild(svgEl("stop", { offset: "0%", "stop-color": color }));
+  grad.appendChild(svgEl("stop", { offset: "100%", "stop-color": lighten(color, 0.5) }));
+  defs.appendChild(grad);
+  return `url(#${id})`;
+}
+
+// Vertical gradient (color -> transparent) for area fills under a line.
+function areaGradient(svg, color) {
+  const id = `area-${String(color).replace(/[^a-z0-9]/gi, "")}`;
+  if (svg.querySelector(`#${id}`)) return `url(#${id})`;
+  let defs = svg.querySelector("defs");
+  if (!defs) {
+    defs = svgEl("defs", {});
+    svg.insertBefore(defs, svg.firstChild);
+  }
+  const grad = svgEl("linearGradient", { id, x1: "0", y1: "0", x2: "0", y2: "1" });
+  grad.appendChild(svgEl("stop", { offset: "0%", "stop-color": color, "stop-opacity": "0.32" }));
+  grad.appendChild(svgEl("stop", { offset: "100%", "stop-color": color, "stop-opacity": "0" }));
+  defs.appendChild(grad);
+  return `url(#${id})`;
 }
 
 function groupBy(rows, getter) {
