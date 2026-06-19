@@ -31,6 +31,7 @@ const state = {
   rankLimit: 15,
   activeView: "overview",
   // ---- global coordination layer ----
+  focusArena: null, // arena explicitly selected from the Arena scale chart
   focusModel: null, // globally selected model (persists across tabs)
   focusOrg: null, // globally selected organization
   hoverKey: null, // transient {type, value} for linked highlighting
@@ -150,13 +151,14 @@ function bindShellEvents() {
     if (!categories.includes(state.category)) {
       state.category = categories.includes("overall") ? "overall" : categories[0];
     }
-    state.organization = "all";
-    resetSelections();
+    clearInteractionTransient();
+    clearArenaScopedState();
     populateControls();
     renderAll();
   });
 
   els.categorySelect.addEventListener("change", () => {
+    clearInteractionTransient();
     state.category = els.categorySelect.value;
     resetSelections();
     populateOrganizationSelect();
@@ -164,6 +166,7 @@ function bindShellEvents() {
   });
 
   els.organizationSelect.addEventListener("change", () => {
+    clearInteractionTransient();
     state.organization = els.organizationSelect.value;
     state.focusModel = null;
     state.brushOrgs = null;
@@ -172,6 +175,7 @@ function bindShellEvents() {
   });
 
   els.rankLimit.addEventListener("change", () => {
+    clearInteractionTransient();
     state.rankLimit = clamp(Number(els.rankLimit.value) || 15, 5, 50);
     els.rankLimit.value = state.rankLimit;
     renderAll();
@@ -213,12 +217,26 @@ function bindShellEvents() {
 }
 
 function resetSelections() {
+  state.focusArena = null;
   state.focusModel = null;
   state.focusOrg = null;
   state.brushOrgs = null;
   state.timeWindow = null;
-  state.hoverKey = null;
+  clearInteractionTransient();
   state.hiddenSeries = new Set();
+}
+
+function clearArenaScopedState() {
+  state.focusArena = null;
+  state.brushOrgs = null;
+  state.timeWindow = null;
+  clearInteractionTransient();
+  state.hiddenSeries = new Set();
+}
+
+function clearInteractionTransient() {
+  state.hoverKey = null;
+  hideTooltip();
 }
 
 function initializeState() {
@@ -300,16 +318,20 @@ function linkHover(el, key) {
   return el;
 }
 
-// The single source of truth for "what is currently emphasized".
-function getActiveKey() {
-  if (state.hoverKey) return state.hoverKey;
+// The single source of truth for what is currently emphasized. Multiple
+// dimensions can be active at once: arena charts should keep their arena
+// selection while model/org charts show their own selected state.
+function getActiveKeys() {
+  const keys = [];
+  if (state.hoverKey) keys.push(state.hoverKey);
   const q = state.search.trim().toLowerCase();
-  if (q) return { type: "search", value: q };
-  if (state.brushOrgs && state.brushOrgs.size) return { type: "orgset", value: state.brushOrgs };
-  if (state.focusModel) return { type: "model", value: state.focusModel };
-  if (state.focusOrg) return { type: "org", value: state.focusOrg };
-  if (state.organization !== "all") return { type: "org", value: state.organization };
-  return null;
+  if (q) keys.push({ type: "search", value: q });
+  if (state.brushOrgs && state.brushOrgs.size) keys.push({ type: "orgset", value: state.brushOrgs });
+  if (state.focusModel) keys.push({ type: "model", value: state.focusModel });
+  if (state.focusOrg) keys.push({ type: "org", value: state.focusOrg });
+  if (state.organization !== "all") keys.push({ type: "org", value: state.organization });
+  if (state.focusArena) keys.push({ type: "arena", value: state.focusArena });
+  return keys;
 }
 
 // Returns true (match) / false (no match) / null (dimension not applicable).
@@ -335,11 +357,15 @@ function markMatches(el, active) {
 }
 
 function applyLinking() {
-  const active = getActiveKey();
+  const activeKeys = getActiveKeys();
   document.querySelectorAll("[data-mark]").forEach((el) => {
     el.classList.remove("is-dim", "is-focus");
-    if (!active) return;
-    const matched = markMatches(el, active);
+    if (!activeKeys.length) return;
+    let matched = null;
+    for (const active of activeKeys) {
+      matched = markMatches(el, active);
+      if (matched !== null) break;
+    }
     if (matched === true) el.classList.add("is-focus");
     else if (matched === false) el.classList.add("is-dim");
   });
@@ -347,6 +373,11 @@ function applyLinking() {
 
 function setFocusModel(name) {
   if (!name) return;
+  clearInteractionTransient();
+  if (state.focusModel === name) {
+    closeDrawer();
+    return;
+  }
   state.focusModel = name;
   state.focusOrg = null;
   state.brushOrgs = null;
@@ -358,6 +389,18 @@ function setFocusModel(name) {
 
 function setFocusOrg(org, { syncSelect = true } = {}) {
   if (!org) return;
+  clearInteractionTransient();
+  if (state.focusOrg === org || state.organization === org) {
+    state.focusOrg = null;
+    state.brushOrgs = null;
+    if (state.organization === org) {
+      state.organization = "all";
+      els.organizationSelect.value = "all";
+    }
+    closeDrawer();
+    renderAll();
+    return;
+  }
   state.focusOrg = org;
   state.focusModel = null;
   state.brushOrgs = null;
@@ -380,6 +423,7 @@ function openDrawer() {
 }
 
 function closeDrawer() {
+  clearInteractionTransient();
   els.detailDrawer.classList.remove("open");
   els.detailDrawer.setAttribute("aria-hidden", "true");
   els.drawerOverlay.hidden = true;
@@ -397,6 +441,7 @@ function renderContextBar() {
   const chips = [];
   chips.push(chip("Arena", state.arena, null));
   chips.push(chip("Category", state.category, null));
+  if (state.focusArena) chips.push(chip("聚焦 Arena", state.focusArena, "focus-arena"));
   if (state.organization !== "all") {
     chips.push(chip("机构筛选", state.organization, "org-filter"));
   }
@@ -437,11 +482,15 @@ function chip(label, value, action) {
 }
 
 function clearFilter(action) {
+  clearInteractionTransient();
   switch (action) {
     case "org-filter":
       state.organization = "all";
       els.organizationSelect.value = "all";
       state.focusOrg = null;
+      break;
+    case "focus-arena":
+      state.focusArena = null;
       break;
     case "focus-model":
       state.focusModel = null;
@@ -589,7 +638,6 @@ function renderArenaBars() {
 
   const innerW = width - margin.left - margin.right;
   const maxModels = max(rows, (d) => d.model_count_latest);
-  const maxSnapshots = max(rows, (d) => d.snapshot_count);
   const barH = 9;
 
   drawAxisLabel(svg, margin.left, height - 6, "latest model count", "axis");
@@ -597,20 +645,23 @@ function renderArenaBars() {
   rows.forEach((d, i) => {
     const y = margin.top + i * 22;
     const modelW = scale(d.model_count_latest, 0, maxModels, 0, innerW);
-    const snapW = scale(d.snapshot_count, 0, maxSnapshots, 0, innerW);
     const isCurrent = d.arena === state.arena;
+    const row = tagMark(svgEl("g", { class: "arena-scale-row" }), { arena: d.arena });
+    svg.appendChild(row);
 
-    text(svg, margin.left - 10, y + 10, d.arena, isCurrent ? "chart-label selected-label" : "chart-label", "end");
-    rect(svg, margin.left, y + 3, snapW, barH, "rgba(255,255,255,0.08)", 4);
-    const aBar = tagMark(rect(svg, margin.left, y + 3, modelW, barH, barGradient(svg, getColor(d.arena)), 4), {
-      arena: d.arena,
-    });
+    row.appendChild(
+      text(svg, margin.left - 10, y + 10, d.arena, isCurrent ? "chart-label selected-label" : "chart-label", "end"),
+    );
+    const aBar = rect(svg, margin.left, y + 3, modelW, barH, barGradient(svg, getColor(d.arena)), 4);
+    aBar.classList.add("arena-scale-model-bar");
+    row.appendChild(aBar);
     if (isCurrent) aBar.style.filter = `drop-shadow(0 0 6px ${getColor(d.arena)})`;
-    text(svg, margin.left + modelW + 8, y + 11, formatNumber(d.model_count_latest), "minor-label");
+    row.appendChild(text(svg, margin.left + modelW + 8, y + 11, formatNumber(d.model_count_latest), "minor-label"));
 
-    const hit = tagMark(rect(svg, margin.left, y - 3, innerW, 20, "transparent", 0), { arena: d.arena });
+    const hit = rect(svg, margin.left, y - 3, innerW, 20, "transparent", 0);
+    row.appendChild(hit);
     hit.style.cursor = "pointer";
-    hit.addEventListener("click", () => switchArena(d.arena));
+    hit.addEventListener("click", () => switchArena(d.arena, { focus: true }));
     hit.addEventListener("mouseenter", (event) =>
       showTooltip(
         event,
@@ -624,16 +675,23 @@ function renderArenaBars() {
   });
 }
 
-function switchArena(arena) {
-  if (arena === state.arena) return;
+function switchArena(arena, { focus = false } = {}) {
+  clearInteractionTransient();
+  if (arena === state.arena) {
+    if (focus) {
+      state.focusArena = state.focusArena === arena ? null : arena;
+      applyLinking();
+    }
+    return;
+  }
   state.arena = arena;
   els.arenaSelect.value = arena;
   const categories = getCategoriesForArena(arena);
   if (!categories.includes(state.category)) {
     state.category = categories.includes("overall") ? "overall" : categories[0];
   }
-  state.organization = "all";
-  resetSelections();
+  clearArenaScopedState();
+  if (focus) state.focusArena = arena;
   populateControls();
   renderAll();
 }

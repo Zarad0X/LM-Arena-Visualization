@@ -1214,6 +1214,19 @@ line.is-focus {
   opacity: 1 !important;
 }
 
+.arena-scale-row.is-focus {
+  opacity: 1 !important;
+}
+
+.arena-scale-row.is-focus .arena-scale-model-bar {
+  stroke: #fff;
+  stroke-width: 1.8;
+}
+
+.arena-scale-row.is-dim .arena-scale-model-bar {
+  filter: none !important;
+}
+
 circle.is-focus {
   stroke: #fff;
   stroke-width: 2.4;
