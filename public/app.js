@@ -1553,10 +1553,10 @@ function renderOrgScatter(rows) {
   }
   drawXAxis(svg, margin, innerW, innerH, 0, maxModels, 5, (v) => Math.round(v));
 
-  // brush overlay beneath the bubbles so clicking a bubble still focuses it
-  const overlay = rect(svg, margin.left, margin.top, innerW, innerH, "transparent", 0);
+  // brush overlay spans the WHOLE chart (not just the inner plot) so a drag can
+  // start from the margins and lasso bubbles sitting right at the edges
+  const overlay = rect(svg, 0, 0, width, height, "transparent", 0);
   overlay.classList.add("brush-overlay");
-  addScatterBrush(svg, { left: margin.left, top: margin.top, innerW, innerH, maxModels, maxRank, rows }, overlay);
 
   // pass 1: draw bubbles, collect positions for label placement
   const marks = rows.map((d) => {
@@ -1581,6 +1581,11 @@ function renderOrgScatter(rows) {
     linkHover(dot, { type: "org", value: org });
     return { org, x, y, r };
   });
+
+  // brushing uses the real bubble positions/radii from above; a box only has to
+  // TOUCH a bubble (center ± radius) to grab it, and may be dragged anywhere in
+  // the chart — both make edge bubbles easy to lasso
+  addScatterBrush(svg, { bounds: { x0: 0, y0: 0, x1: width, y1: height }, marks, rows }, overlay);
 
   // pass 2: labels. Each carries a dark halo (paint-order stroke) so it stays
   // legible even over a bubble. We measure the real label width and push a label
@@ -1738,16 +1743,19 @@ function addTimeBrush(svg, geom, sharedOverlay) {
 }
 
 function addScatterBrush(svg, geom, sharedOverlay) {
-  const { left, top, innerW, innerH, maxModels, maxRank, rows } = geom;
-  const overlay = sharedOverlay || rect(svg, left, top, innerW, innerH, "transparent", 0);
+  const { bounds, marks, rows } = geom;
+  const overlay = sharedOverlay || rect(svg, bounds.x0, bounds.y0, bounds.x1 - bounds.x0, bounds.y1 - bounds.y0, "transparent", 0);
   if (!sharedOverlay) overlay.classList.add("brush-overlay");
   let start = null;
   let box = null;
 
+  const cx = (event) => clamp(pointerX(svg, event), bounds.x0, bounds.x1);
+  const cy = (event) => clamp(pointerY(svg, event), bounds.y0, bounds.y1);
+
   const onMove = (event) => {
     if (!start || !box) return;
-    const x = clamp(pointerX(svg, event), left, left + innerW);
-    const y = clamp(pointerY(svg, event), top, top + innerH);
+    const x = cx(event);
+    const y = cy(event);
     box.setAttribute("x", Math.min(start.x, x));
     box.setAttribute("y", Math.min(start.y, y));
     box.setAttribute("width", Math.abs(x - start.x));
@@ -1757,21 +1765,24 @@ function addScatterBrush(svg, geom, sharedOverlay) {
     window.removeEventListener("mousemove", onMove);
     window.removeEventListener("mouseup", onUp);
     if (!start) return;
-    const x = clamp(pointerX(svg, event), left, left + innerW);
-    const y = clamp(pointerY(svg, event), top, top + innerH);
-    const x1px = Math.min(start.x, x);
-    const x2px = Math.max(start.x, x);
-    const y1px = Math.min(start.y, y);
-    const y2px = Math.max(start.y, y);
+    const x = cx(event);
+    const y = cy(event);
+    const x1 = Math.min(start.x, x);
+    const x2 = Math.max(start.x, x);
+    const y1 = Math.min(start.y, y);
+    const y2 = Math.max(start.y, y);
     start = null;
     if (box) box.remove();
     box = null;
-    if (x2px - x1px < 6 && y2px - y1px < 6) return; // click, not brush
+    if (x2 - x1 < 6 && y2 - y1 < 6) return; // click, not brush
+    // select a bubble when the box merely TOUCHES it (center ± radius + slack),
+    // not only when it covers the exact center — makes edge bubbles easy to grab
     const selected = new Set();
-    rows.forEach((d) => {
-      const px = left + scale(d.unique_models, 0, maxModels, 0, innerW);
-      const py = top + scale(d.best_rank, 1, maxRank, 0, innerH);
-      if (px >= x1px && px <= x2px && py >= y1px && py <= y2px) selected.add(d.organization || "unknown");
+    marks.forEach((m) => {
+      const pad = m.r + 5;
+      if (m.x + pad >= x1 && m.x - pad <= x2 && m.y + pad >= y1 && m.y - pad <= y2) {
+        selected.add(m.org);
+      }
     });
     if (!selected.size) return;
     state.brushOrgs = selected;
@@ -1783,7 +1794,7 @@ function addScatterBrush(svg, geom, sharedOverlay) {
   };
 
   overlay.addEventListener("mousedown", (event) => {
-    start = { x: clamp(pointerX(svg, event), left, left + innerW), y: clamp(pointerY(svg, event), top, top + innerH) };
+    start = { x: cx(event), y: cy(event) };
     box = rect(svg, start.x, start.y, 0, 0, "rgba(22,105,122,0.14)", 0);
     box.classList.add("brush-live");
     window.addEventListener("mousemove", onMove);

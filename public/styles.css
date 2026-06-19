@@ -901,7 +901,8 @@ svg {
   font-size: 11px;
 }
 
-/* scatter labels carry a dark halo so they stay readable over any bubble */
+/* scatter labels carry a dark halo so they stay readable over any bubble;
+   pointer-events:none lets a brush drag start even when it begins on a label */
 .scatter-label {
   fill: var(--ink);
   font-size: 11px;
@@ -910,6 +911,7 @@ svg {
   stroke: #0a0b0e;
   stroke-width: 3.2px;
   stroke-linejoin: round;
+  pointer-events: none;
 }
 
 .tl-arena {
