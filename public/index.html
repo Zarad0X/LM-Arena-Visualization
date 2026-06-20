@@ -58,6 +58,11 @@
 
         <div id="contextBar" class="context-bar" hidden></div>
 
+        <section class="analysis-prompt" aria-label="分析入口">
+          <span>当前分析问题</span>
+          <strong id="analysisPrompt">当前领先是否可靠？不同任务下排名是否一致？</strong>
+        </section>
+
         <section class="spotlight" aria-label="摘要视图">
           <div id="hero" class="hero">
             <article class="hero-headline">
@@ -83,18 +88,58 @@
               <h2>当前榜单与置信区间</h2>
               <span id="leaderboardNote"></span>
             </div>
+            <div class="chart-legend uncertainty-legend" aria-label="评分图图例">
+              <span><i class="legend-interval"></i>95% 评分区间</span>
+              <span><i class="legend-votes"></i>气泡大小 = 票数</span>
+              <span><i class="legend-overlap"></i>区间重叠 = 名次未必可区分</span>
+            </div>
             <div class="chart-wrap extra-tall">
               <svg id="leaderboardChart" role="img" aria-label="当前榜单评分图"></svg>
             </div>
           </article>
 
-          <article class="panel tile t-evolution">
+          <article class="panel tile t-history">
             <div class="panel-head">
-              <h2>排名演化</h2>
-              <span id="evolutionNote"></span>
+              <h2>排名历史</h2>
+              <div class="panel-head-actions">
+                <span id="evolutionNote"></span>
+                <div class="segmented" aria-label="排名历史视图模式">
+                  <button id="evolutionModeButton" class="is-active" type="button">趋势分析</button>
+                  <button id="raceModeButton" type="button">竞速播放</button>
+                </div>
+              </div>
             </div>
-            <div class="chart-wrap tall">
-              <svg id="evolutionChart" role="img" aria-label="排名演化折线图"></svg>
+            <div id="evolutionMode" class="rank-mode-panel">
+              <div class="chart-wrap extra-tall">
+                <svg id="evolutionChart" role="img" aria-label="排名演化折线图"></svg>
+              </div>
+            </div>
+            <div id="raceMode" class="rank-mode-panel" hidden>
+              <div class="race-controls">
+                <button id="racePlay" class="race-play" type="button">播放</button>
+                <input
+                  id="raceScrub"
+                  class="race-scrub"
+                  type="range"
+                  min="0"
+                  max="0"
+                  value="0"
+                  aria-label="竞速时间轴"
+                />
+                <label class="race-speed">
+                  <span>Speed</span>
+                  <select id="raceSpeed">
+                    <option value="1">1x</option>
+                    <option value="2" selected>2x</option>
+                    <option value="4">4x</option>
+                  </select>
+                </label>
+                <span id="raceDate"></span>
+              </div>
+              <div class="chart-wrap extra-tall">
+                <p id="raceWatermark" class="race-watermark" aria-hidden="true"></p>
+                <svg id="raceChart" role="img" aria-label="排名竞速图"></svg>
+              </div>
             </div>
           </article>
 
@@ -114,38 +159,7 @@
               <span id="orgScatterNote"></span>
             </div>
             <div class="chart-wrap">
-              <svg id="orgScatter" role="img" aria-label="机构模型数量与最好名次散点图"></svg>
-            </div>
-          </article>
-
-          <article class="panel tile t-race">
-            <div class="panel-head">
-              <h2>排名竞速</h2>
-              <span id="raceDate"></span>
-            </div>
-            <div class="race-controls">
-              <button id="racePlay" class="race-play" type="button">播放</button>
-              <input
-                id="raceScrub"
-                class="race-scrub"
-                type="range"
-                min="0"
-                max="0"
-                value="0"
-                aria-label="竞速时间轴"
-              />
-              <label class="race-speed">
-                <span>Speed</span>
-                <select id="raceSpeed">
-                  <option value="1">1x</option>
-                  <option value="2" selected>2x</option>
-                  <option value="4">4x</option>
-                </select>
-              </label>
-            </div>
-            <div class="chart-wrap extra-tall">
-              <p id="raceWatermark" class="race-watermark" aria-hidden="true"></p>
-              <svg id="raceChart" role="img" aria-label="排名竞速图"></svg>
+              <svg id="orgScatter" role="img" aria-label="机构模型数量与平均评分散点图"></svg>
             </div>
           </article>
 

@@ -282,6 +282,31 @@ h2 {
   margin-bottom: 14px;
 }
 
+.analysis-prompt {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: -2px 0 14px;
+  border-left: 3px solid var(--accent);
+  padding: 8px 12px;
+  color: var(--ink-dim);
+  background: rgba(var(--accent-rgb), 0.045);
+}
+
+.analysis-prompt span {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.analysis-prompt strong {
+  font-size: 14px;
+  font-weight: 650;
+}
+
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
@@ -298,11 +323,11 @@ h2 {
   background:
     linear-gradient(150deg, rgba(var(--accent-rgb), 0.18), rgba(var(--accent-2-rgb), 0.09) 62%, transparent),
     var(--surface);
-  padding: 18px 20px;
+  padding: 14px 18px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   backdrop-filter: blur(12px);
   box-shadow: var(--shadow), var(--glow-soft);
 }
@@ -569,9 +594,9 @@ h2 {
   color: rgba(0, 0, 0, 0.62);
 }
 
-.podium-bar.gold { background: linear-gradient(180deg, var(--gold), #c2901c); height: 96px; box-shadow: 0 0 30px rgba(255, 207, 74, 0.5); }
-.podium-bar.silver { background: linear-gradient(180deg, var(--silver), #8b94a6); height: 76px; box-shadow: 0 0 16px rgba(211, 218, 230, 0.18); }
-.podium-bar.bronze { background: linear-gradient(180deg, var(--bronze), #9c5a32); height: 62px; box-shadow: 0 0 16px rgba(224, 138, 82, 0.2); }
+.podium-bar.gold { background: linear-gradient(180deg, var(--gold), #c2901c); height: 74px; box-shadow: 0 0 24px rgba(255, 207, 74, 0.42); }
+.podium-bar.silver { background: linear-gradient(180deg, var(--silver), #8b94a6); height: 58px; box-shadow: 0 0 14px rgba(211, 218, 230, 0.16); }
+.podium-bar.bronze { background: linear-gradient(180deg, var(--bronze), #9c5a32); height: 48px; box-shadow: 0 0 14px rgba(224, 138, 82, 0.18); }
 
 @keyframes rise {
   from { transform: scaleY(0); opacity: 0; }
@@ -665,7 +690,7 @@ button:focus-visible {
  * ============================================================ */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin: 0;
   min-width: 0;
@@ -680,7 +705,7 @@ button:focus-visible {
   background:
     linear-gradient(135deg, rgba(var(--accent-rgb), 0.08), transparent 54%),
     var(--surface);
-  padding: 13px 15px 12px;
+  padding: 10px 14px;
   backdrop-filter: blur(10px);
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
   box-shadow: var(--shadow-soft);
@@ -769,11 +794,10 @@ button:focus-visible {
 }
 
 /* Reading order: leaderboard -> time -> race -> organizations -> records */
-.t-leaderboard { grid-column: span 8; }
-.t-evolution { grid-column: span 4; }
+.t-leaderboard { grid-column: span 12; }
+.t-history { grid-column: span 12; }
 .t-timeline { grid-column: span 8; }
 .t-scatter { grid-column: span 4; }
-.t-race { grid-column: span 12; } /* signature interaction — full width */
 .t-orgbars { grid-column: span 6; }
 .t-arena { grid-column: span 6; }
 .t-table { grid-column: span 12; }
@@ -784,24 +808,101 @@ button:focus-visible {
 }
 
 .t-leaderboard .chart-wrap.extra-tall,
-.t-race .chart-wrap.extra-tall {
+.t-history .chart-wrap.extra-tall {
   min-height: 390px;
 }
 
-.t-evolution .chart-wrap.tall,
 .t-timeline .chart-wrap.tall {
   min-height: 330px;
 }
 
 @media (max-width: 1180px) {
   .t-leaderboard,
-  .t-evolution,
+  .t-history,
   .t-timeline,
-  .t-race,
   .t-arena,
   .t-table { grid-column: span 12; }
   .t-scatter,
   .t-orgbars { grid-column: span 6; }
+}
+
+.panel-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 3px;
+  background: rgba(7, 9, 13, 0.72);
+}
+
+.segmented button {
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.segmented button.is-active {
+  background: rgba(var(--accent-rgb), 0.15);
+  color: var(--accent);
+}
+
+.rank-mode-panel[hidden] {
+  display: none !important;
+}
+
+.chart-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 16px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.chart-legend i {
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
+.legend-interval {
+  width: 24px;
+  height: 2px;
+  background: rgba(197, 204, 218, 0.72);
+}
+
+.legend-votes {
+  width: 11px;
+  height: 11px;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.legend-overlap {
+  width: 16px;
+  height: 12px;
+  border-radius: 3px;
+  background: rgba(197, 204, 218, 0.12);
 }
 
 @media (max-width: 760px) {
@@ -869,7 +970,7 @@ svg {
 .axis,
 .tick-label {
   fill: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .axis-line,
@@ -1528,7 +1629,7 @@ button.mini-row:hover {
    Rendered as an HTML layer behind the transparent SVG — NOT an SVG <text> —
    because a huge translucent SVG text node left a Chromium repaint ghost of the
    just-removed scatter brush rectangle inside its bounding box. */
-.t-race .chart-wrap {
+#raceMode .chart-wrap {
   position: relative;
 }
 
@@ -1671,5 +1772,23 @@ button.mini-row:hover {
 
   .panel-head span {
     text-align: left;
+  }
+
+  .panel-head-actions {
+    width: 100%;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .analysis-prompt {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .chart-legend {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
   }
 }
