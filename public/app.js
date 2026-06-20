@@ -24,11 +24,37 @@ const palette = [
   "#c77dff",
 ];
 
+const arenaPalette = [
+  "#19f0d8", "#ff8a5b", "#8ec5ff", "#c7a6ff", "#66d9a8", "#f0c66b",
+  "#70a7ff", "#ee87b7", "#74d4e8", "#d7a56d", "#8fd17f", "#9e9cff",
+  "#d28ae8", "#9aa7b8",
+];
+
+const arenaMeta = {
+  text: { label: "文本对话", group: "语言与知识", description: "通用问答与对话能力" },
+  document: { label: "文档理解", group: "语言与知识", description: "长文档阅读与推理" },
+  search: { label: "联网搜索", group: "语言与知识", description: "检索、整合与事实回答" },
+  webdev: { label: "网页开发", group: "语言与知识", description: "前端生成与网页实现" },
+  text_style_control: { label: "文本风格控制", group: "可控生成", description: "遵循指定文本风格" },
+  document_style_control: { label: "文档风格控制", group: "可控生成", description: "控制文档表达方式" },
+  search_style_control: { label: "搜索风格控制", group: "可控生成", description: "控制检索回答风格" },
+  vision_style_control: { label: "视觉风格控制", group: "可控生成", description: "遵循视觉输出风格" },
+  vision: { label: "视觉理解", group: "图像与视频", description: "图像内容理解与推理" },
+  text_to_image: { label: "文生图", group: "图像与视频", description: "从文本生成图像" },
+  image_edit: { label: "图像编辑", group: "图像与视频", description: "按指令修改图像" },
+  text_to_video: { label: "文生视频", group: "图像与视频", description: "从文本生成视频" },
+  image_to_video: { label: "图生视频", group: "图像与视频", description: "从图像生成动态内容" },
+  video_edit: { label: "视频编辑", group: "图像与视频", description: "按指令修改视频" },
+};
+
 const state = {
   arena: "text",
   category: "overall",
   organization: "all",
   rankLimit: 15,
+  analysisMode: "reliability",
+  rankHistoryMode: "evolution",
+  activityMetric: "monthly",
   activeView: "overview",
   // ---- global coordination layer ----
   focusArena: null, // arena explicitly selected from the Arena scale chart
@@ -64,6 +90,7 @@ const data = {
 const profileByModel = new Map();
 const els = {};
 const colorCache = new Map();
+const arenaColorCache = new Map();
 
 document.addEventListener("DOMContentLoaded", init);
 
@@ -100,12 +127,20 @@ function cacheElements() {
   [
     "dataStatus",
     "arenaSelect",
+    "arenaTrigger",
+    "arenaMenu",
     "categorySelect",
+    "categoryTrigger",
+    "categoryMenu",
     "organizationSelect",
+    "organizationTrigger",
+    "organizationMenu",
     "rankLimit",
+    "rankChoices",
     "modelSearch",
     "searchResults",
     "contextBar",
+    "analysisPrompt",
     "kpiGrid",
     "hero",
     "heroKicker",
@@ -123,6 +158,10 @@ function cacheElements() {
     "raceScrub",
     "raceSpeed",
     "raceDate",
+    "evolutionModeButton",
+    "raceModeButton",
+    "evolutionMode",
+    "raceMode",
     "evolutionChart",
     "orgScatter",
     "orgBars",
@@ -178,7 +217,19 @@ function bindShellEvents() {
     clearInteractionTransient();
     state.rankLimit = clamp(Number(els.rankLimit.value) || 15, 5, 50);
     els.rankLimit.value = state.rankLimit;
+    syncFilterControls();
     renderAll();
+  });
+
+  bindFilterMenu(els.arenaSelect, els.arenaTrigger, els.arenaMenu);
+  bindFilterMenu(els.categorySelect, els.categoryTrigger, els.categoryMenu);
+  bindFilterMenu(els.organizationSelect, els.organizationTrigger, els.organizationMenu);
+
+  els.rankChoices.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-rank]");
+    if (!button) return;
+    els.rankLimit.value = button.dataset.rank;
+    els.rankLimit.dispatchEvent(new Event("change"));
   });
 
   els.modelSearch.addEventListener("input", () => {
@@ -191,12 +242,16 @@ function bindShellEvents() {
     if (!els.searchResults.contains(event.target) && event.target !== els.modelSearch) {
       els.searchResults.hidden = true;
     }
+    if (!event.target.closest(".filter-field")) closeFilterMenus();
   });
 
   els.drawerClose.addEventListener("click", closeDrawer);
   els.drawerOverlay.addEventListener("click", closeDrawer);
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeDrawer();
+    if (event.key === "Escape") {
+      closeDrawer();
+      closeFilterMenus();
+    }
   });
 
   // bar-chart-race transport
@@ -211,6 +266,25 @@ function bindShellEvents() {
       stopRace();
       startRace();
     }
+  });
+
+  els.evolutionModeButton.addEventListener("click", () => setRankHistoryMode("evolution"));
+  els.raceModeButton.addEventListener("click", () => setRankHistoryMode("race"));
+
+  document.querySelectorAll("[data-analysis-mode]").forEach((button) => {
+    button.addEventListener("click", () => setAnalysisMode(button.dataset.analysisMode));
+  });
+  document.querySelectorAll("[data-activity-metric]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activityMetric = button.dataset.activityMetric;
+      document.querySelectorAll("[data-activity-metric]").forEach((node) => {
+        const active = node.dataset.activityMetric === state.activityMetric;
+        node.classList.toggle("is-active", active);
+        node.setAttribute("aria-pressed", String(active));
+      });
+      renderTimeline();
+      applyLinking();
+    });
   });
 
   window.addEventListener("resize", debounce(renderViews, 140));
@@ -255,6 +329,7 @@ function populateControls() {
   fillSelect(els.categorySelect, getCategoriesForArena(state.arena), state.category);
   populateOrganizationSelect();
   els.rankLimit.value = state.rankLimit;
+  syncFilterControls();
 }
 
 function populateOrganizationSelect() {
@@ -271,24 +346,143 @@ function populateOrganizationSelect() {
   fillSelect(els.organizationSelect, ["all", ...organizations], state.organization, (value) =>
     value === "all" ? "全部机构" : value,
   );
+  syncFilterControl(els.organizationSelect, els.organizationTrigger, els.organizationMenu);
+}
+
+function bindFilterMenu(select, trigger, menu) {
+  trigger.addEventListener("click", () => {
+    const willOpen = menu.hidden;
+    closeFilterMenus();
+    menu.hidden = !willOpen;
+    trigger.setAttribute("aria-expanded", String(willOpen));
+  });
+
+  menu.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-value]");
+    if (!option) return;
+    select.value = option.dataset.value;
+    if (select === els.arenaSelect) syncArenaControl();
+    else syncFilterControl(select, trigger, menu);
+    closeFilterMenus();
+    select.dispatchEvent(new Event("change"));
+  });
+}
+
+function closeFilterMenus() {
+  [
+    [els.arenaTrigger, els.arenaMenu],
+    [els.categoryTrigger, els.categoryMenu],
+    [els.organizationTrigger, els.organizationMenu],
+  ].forEach(([trigger, menu]) => {
+    menu.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+  });
+}
+
+function syncFilterControls() {
+  syncArenaControl();
+  syncFilterControl(els.categorySelect, els.categoryTrigger, els.categoryMenu);
+  syncFilterControl(els.organizationSelect, els.organizationTrigger, els.organizationMenu);
+  els.rankChoices.querySelectorAll("[data-rank]").forEach((button) => {
+    const active = Number(button.dataset.rank) === state.rankLimit;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function syncArenaControl() {
+  const selectedMeta = arenaMeta[els.arenaSelect.value];
+  els.arenaTrigger.querySelector(".filter-value").textContent = selectedMeta?.label || els.arenaSelect.value || "--";
+  const values = [...els.arenaSelect.options].map((option) => option.value);
+  const groups = ["语言与知识", "可控生成", "图像与视频"];
+  els.arenaMenu.innerHTML = groups
+    .map((group) => {
+      const options = values.filter((value) => (arenaMeta[value]?.group || "其他") === group);
+      if (!options.length) return "";
+      return `<section class="arena-group"><h3>${group}</h3><div>${options
+        .map((value) => {
+          const meta = arenaMeta[value] || { label: value, description: value };
+          const active = value === els.arenaSelect.value;
+          return `<button type="button" role="option" data-value="${escapeHtml(value)}" aria-selected="${active}" class="${active ? "is-active" : ""}"><span><strong>${escapeHtml(meta.label)}</strong><small>${escapeHtml(meta.description)}</small></span><em>${escapeHtml(value)}</em><i aria-hidden="true"></i></button>`;
+        })
+        .join("")}</div></section>`;
+    })
+    .join("");
+}
+
+function syncFilterControl(select, trigger, menu) {
+  const selected = select.options[select.selectedIndex];
+  trigger.querySelector(".filter-value").textContent = selected?.textContent || "--";
+  menu.innerHTML = [...select.options]
+    .map((option) => {
+      const active = option.value === select.value;
+      return `<button type="button" role="option" data-value="${escapeHtml(option.value)}" aria-selected="${active}" class="${active ? "is-active" : ""}"><span>${escapeHtml(option.textContent)}</span><i aria-hidden="true"></i></button>`;
+    })
+    .join("");
 }
 
 function renderAll() {
+  updateAnalysisModeUi();
   renderHero();
   renderKpis();
   renderContextBar();
   renderViews();
 }
 
-// Every panel is rendered into one dense bento grid (no folding, no long scroll).
 function renderViews() {
   if (!data.manifest) return;
-  renderOverview();
-  renderLeaderboard();
-  renderRace();
-  renderEvolution();
-  renderOrganizations();
+  if (state.analysisMode === "reliability") renderLeaderboard();
+  if (state.analysisMode === "evolution") {
+    renderRankHistory();
+    renderTimeline();
+  }
+  if (state.analysisMode === "ecosystem") {
+    renderOrganizations();
+    renderArenaBars();
+  }
   applyLinking();
+}
+
+function setAnalysisMode(mode) {
+  if (!['reliability', 'evolution', 'ecosystem'].includes(mode) || state.analysisMode === mode) return;
+  state.analysisMode = mode;
+  stopRace();
+  renderAll();
+}
+
+function updateAnalysisModeUi() {
+  document.querySelectorAll("[data-analysis-mode]").forEach((button) => {
+    const active = button.dataset.analysisMode === state.analysisMode;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  document.querySelectorAll("[data-analysis-view]").forEach((node) => {
+    node.hidden = node.dataset.analysisView !== state.analysisMode;
+  });
+  const questions = {
+    reliability: "当前领先是否可靠？哪些名次在统计上难以区分？",
+    evolution: "领先者何时更替？当前模型如何进入并留在头部？",
+    ecosystem: "哪些机构兼具高能力与广覆盖？不同 Arena 的竞争密度如何？",
+  };
+  els.analysisPrompt.textContent = `${state.arena} / ${state.category}：${questions[state.analysisMode]}`;
+}
+
+function setRankHistoryMode(mode) {
+  state.rankHistoryMode = mode;
+  stopRace();
+  race.key = null;
+  renderRankHistory();
+  applyLinking();
+}
+
+function renderRankHistory() {
+  const showEvolution = state.rankHistoryMode === "evolution";
+  els.evolutionMode.hidden = !showEvolution;
+  els.raceMode.hidden = showEvolution;
+  els.evolutionModeButton.classList.toggle("is-active", showEvolution);
+  els.raceModeButton.classList.toggle("is-active", !showEvolution);
+  if (showEvolution) renderEvolution();
+  else renderRace();
 }
 
 /* ============================================================
@@ -576,13 +770,15 @@ function renderSearchResults() {
  * ============================================================ */
 
 function renderKpis() {
-  const m = data.manifest;
   const selectedRows = getFilteredLatestRows({ respectRank: false });
+  const votes = selectedRows.reduce((sum, row) => sum + (row.vote_count || 0), 0);
+  const widths = selectedRows.map((row) => row.confidence_width).filter(Number.isFinite).sort((a, b) => a - b);
+  const medianWidth = widths.length ? widths[Math.floor(widths.length / 2)] : 0;
   const kpis = [
-    { label: "Full Rows", raw: m.full_rows },
-    { label: "Latest Rows", raw: m.latest_rows },
-    { label: "Arenas", raw: m.arena_count },
-    { label: "Models", raw: m.model_count_latest },
+    { label: "当前模型", raw: unique(selectedRows.map((d) => d.model_name)).length },
+    { label: "同场机构", raw: unique(selectedRows.map((d) => d.organization || "unknown")).length },
+    { label: "累计票数", text: compactNumber(votes) },
+    { label: "中位区间宽度", text: formatDecimal(medianWidth) },
   ];
 
   if (state.timeWindow) {
@@ -592,10 +788,8 @@ function renderKpis() {
         d.category === state.category &&
         inWindow(new Date(d.leaderboard_publish_date).getTime()),
     );
-    const votes = rows.reduce((sum, d) => sum + (d.total_votes || 0), 0);
-    kpis.push({ label: "窗口内 votes", text: compactNumber(votes) });
-  } else {
-    kpis.push({ label: "Selected Rows", raw: selectedRows.length });
+    const windowVotes = rows.reduce((sum, d) => sum + (d.total_votes || 0), 0);
+    kpis[2] = { label: "窗口内票数", text: compactNumber(windowVotes) };
   }
 
   els.kpiGrid.innerHTML = kpis
@@ -650,12 +844,19 @@ function renderArenaBars() {
     svg.appendChild(row);
 
     row.appendChild(
-      text(svg, margin.left - 10, y + 10, d.arena, isCurrent ? "chart-label selected-label" : "chart-label", "end"),
+      text(
+        svg,
+        margin.left - 10,
+        y + 10,
+        arenaMeta[d.arena]?.label || d.arena,
+        isCurrent ? "chart-label selected-label" : "chart-label",
+        "end",
+      ),
     );
-    const aBar = rect(svg, margin.left, y + 3, modelW, barH, barGradient(svg, getColor(d.arena)), 4);
+    const aBar = rect(svg, margin.left, y + 3, modelW, barH, barGradient(svg, getArenaColor(d.arena)), 4);
     aBar.classList.add("arena-scale-model-bar");
     row.appendChild(aBar);
-    if (isCurrent) aBar.style.filter = `drop-shadow(0 0 6px ${getColor(d.arena)})`;
+    if (isCurrent) aBar.style.filter = `drop-shadow(0 0 6px ${getArenaColor(d.arena)})`;
     row.appendChild(text(svg, margin.left + modelW + 8, y + 11, formatNumber(d.model_count_latest), "minor-label"));
 
     const hit = rect(svg, margin.left, y - 3, innerW, 20, "transparent", 0);
@@ -702,6 +903,8 @@ function switchArena(arena, { focus = false } = {}) {
 // arena; brush the plot to set the shared time window.
 function renderTimeline() {
   const svg = setupSvg(els.timelineChart);
+  const metricLabels = { cumulative: "累计票数", monthly: "月新增票数", growth: "环比增长率" };
+  els.timelineNote.textContent = `${state.arena} · ${metricLabels[state.activityMetric]}`;
   const arenas = [...data.arenaSummary].sort((a, b) => new Date(a.date_start) - new Date(b.date_start));
   const margin = { top: 24, right: 150, bottom: 32, left: 66 };
   const width = svg.clientWidth || 900;
@@ -714,19 +917,30 @@ function renderTimeline() {
   const plotTop = margin.top;
   const plotBottom = margin.top + innerH;
 
-  text(svg, margin.left, plotTop - 9, "各 arena 投票活跃度（log 票数）· 点击折线聚焦", "tl-band-label");
+  text(svg, margin.left, plotTop - 9, `${metricLabels[state.activityMetric]} · 当前 Arena 高亮 · 点击折线切换`, "tl-band-label");
 
   const catOf = (a) =>
     a.categories && a.categories.includes("overall") ? "overall" : (a.categories && a.categories[0]) || "overall";
   const series = arenas
-    .map((a) => ({
-      arena: a.arena,
-      // drop snapshots with 0 votes (text's 2023 history has no recorded counts),
-      // otherwise a log axis pins them to the floor and the line dives down
-      rows: data.activity
+    .map((a) => {
+      const snapshots = data.activity
         .filter((d) => d.arena === a.arena && d.category === catOf(a) && (d.total_votes || 0) > 0)
-        .sort((x, y) => new Date(x.leaderboard_publish_date) - new Date(y.leaderboard_publish_date)),
-    }))
+        .sort((x, y) => new Date(x.leaderboard_publish_date) - new Date(y.leaderboard_publish_date));
+      const monthly = [...groupBy(snapshots, (row) => row.leaderboard_publish_date.slice(0, 7)).values()]
+        .map((monthRows) => monthRows[monthRows.length - 1]);
+      const source = state.activityMetric === "cumulative" ? snapshots : monthly;
+      const rows = source.map((row, index) => {
+        const previous = source[index - 1]?.total_votes || row.total_votes;
+        const delta = Math.max(0, row.total_votes - previous);
+        const value = state.activityMetric === "cumulative"
+          ? row.total_votes
+          : state.activityMetric === "growth"
+            ? (previous > 0 ? (delta / previous) * 100 : 0)
+            : delta;
+        return { ...row, activity_value: value };
+      });
+      return { arena: a.arena, rows };
+    })
     .filter((s) => s.rows.length);
 
   // time domain trimmed to where data actually begins — skip the empty 2023 span
@@ -747,24 +961,33 @@ function renderTimeline() {
   text(svg, margin.left + innerW, plotBottom + 18, shortDate(end), "axis", "middle");
   drawWindowBand(svg, { left: margin.left, top: plotTop }, innerW, innerH, start, end);
 
-  // log domain starts at the real minimum vote count (not 1), compressing the
-  // empty low region so the dense 100K–10M band gets the vertical space
-  const allVotes = series.flatMap((s) => s.rows.map((r) => r.total_votes));
-  const maxVotes = Math.max(...allVotes);
-  const minVotes = Math.min(...allVotes);
-  const loL = Math.log10(minVotes);
-  const hiL = Math.log10(maxVotes);
-  const yOf = (v) => plotBottom - scale(Math.log10(Math.max(v, minVotes)), loL, hiL, 0, innerH);
+  const allValues = series.flatMap((s) => s.rows.map((r) => r.activity_value)).filter(Number.isFinite);
+  const useLog = state.activityMetric === "cumulative";
+  const positiveValues = allValues.filter((value) => value > 0);
+  const minValue = useLog ? Math.min(...positiveValues) : 0;
+  const maxValue = Math.max(...allValues, 1);
+  const loL = useLog ? Math.log10(minValue) : 0;
+  const hiL = useLog ? Math.log10(maxValue) : 0;
+  const yOf = (value) => useLog
+    ? plotBottom - scale(Math.log10(Math.max(value, minValue)), loL, hiL, 0, innerH)
+    : plotBottom - scale(Math.sqrt(Math.max(0, value)), 0, Math.sqrt(maxValue), 0, innerH);
 
-  // log-decade gridlines within the visible range
-  for (let p = Math.ceil(loL); p <= Math.floor(hiL); p += 1) {
-    const v = Math.pow(10, p);
-    const y = yOf(v);
-    line(svg, margin.left, y, margin.left + innerW, y, "grid-line");
-    text(svg, margin.left - 8, y + 4, compactNumber(v), "axis", "end");
+  if (useLog) {
+    for (let p = Math.ceil(loL); p <= Math.floor(hiL); p += 1) {
+      const value = Math.pow(10, p);
+      const y = yOf(value);
+      line(svg, margin.left, y, margin.left + innerW, y, "grid-line");
+      text(svg, margin.left - 8, y + 4, compactNumber(value), "axis", "end");
+    }
+  } else {
+    for (let index = 0; index <= 4; index += 1) {
+      const value = maxValue * Math.pow(index / 4, 2);
+      const y = yOf(value);
+      line(svg, margin.left, y, margin.left + innerW, y, "grid-line");
+      const label = state.activityMetric === "growth" ? `${Math.round(value)}%` : compactNumber(value);
+      text(svg, margin.left - 8, y + 4, label, "axis", "end");
+    }
   }
-  // label the axis floor (the real minimum) too
-  text(svg, margin.left - 8, plotBottom + 4, compactNumber(minVotes), "axis", "end");
 
   // brush overlay BENEATH the lines: lines stay clickable, empty area brushes
   const overlay = rect(svg, margin.left, plotTop, innerW, innerH, "transparent", 0);
@@ -776,9 +999,9 @@ function renderTimeline() {
     // style-control variants largely duplicate their base arena → dim by default
     const isStyle = s.arena.endsWith("_style_control");
     const dim = isStyle && !isCurrent;
-    const color = getColor(s.arena);
-    const baseOpacity = isCurrent ? 1 : dim ? 0.16 : 0.55;
-    const pts = s.rows.map((r) => [xOf(new Date(r.leaderboard_publish_date).getTime()), yOf(r.total_votes)]);
+    const color = isCurrent ? getArenaColor(s.arena) : "#718096";
+    const baseOpacity = isCurrent ? 1 : dim ? 0.1 : 0.25;
+    const pts = s.rows.map((r) => [xOf(new Date(r.leaderboard_publish_date).getTime()), yOf(r.activity_value)]);
     // glowing gradient area beneath the currently-focused arena's line
     if (isCurrent && pts.length > 1) {
       const areaD = `${linePath(pts)} L${pts[pts.length - 1][0].toFixed(2)},${plotBottom} L${pts[0][0].toFixed(2)},${plotBottom} Z`;
@@ -801,16 +1024,14 @@ function renderTimeline() {
     p.addEventListener("click", () => switchArena(s.arena));
     const last = s.rows[s.rows.length - 1];
     const prev = s.rows[s.rows.length - 2];
-    const deltaLine = prev
-      ? `<br>较上一快照 ${last.total_votes - prev.total_votes >= 0 ? "+" : ""}${formatNumber(
-          last.total_votes - prev.total_votes,
-        )} votes`
-      : "";
+    const metricValue = state.activityMetric === "growth"
+      ? `${formatDecimal(last.activity_value)}%`
+      : formatNumber(last.activity_value);
     p.addEventListener("mouseenter", (event) => {
       p.setAttribute("stroke-opacity", 1); // hovering a dimmed line restores it
       showTooltip(
         event,
-        `<strong>${s.arena}</strong>最新累计 votes ${formatNumber(last.total_votes)}${deltaLine}<br>模型 ${formatNumber(
+        `<strong>${s.arena}</strong>${metricLabels[state.activityMetric]} ${metricValue}<br>模型 ${formatNumber(
           last.model_count,
         )} · ${s.rows.length} 个快照<br><em>点击聚焦该 arena</em>`,
       );
@@ -827,8 +1048,13 @@ function renderTimeline() {
     s.dim = dim;
   });
 
-  // right-side arena labels, nudged apart so 14 names don't overlap
-  const labels = series.slice().sort((a, b) => a.endY - b.endY);
+  // Label the selected arena plus the four strongest current peers; the rest
+  // stay as quiet context lines and reveal details on hover.
+  const labels = series
+    .slice()
+    .sort((a, b) => b.rows[b.rows.length - 1].activity_value - a.rows[a.rows.length - 1].activity_value)
+    .filter((item, index) => item.isCurrent || index < 4)
+    .sort((a, b) => a.endY - b.endY);
   let prevY = -Infinity;
   labels.forEach((s) => {
     const ly = Math.max(s.endY, prevY + 12);
@@ -898,7 +1124,7 @@ function renderLeaderboardChart(rows) {
     const x = margin.left + scale(d.rating, minRating, maxRating, 0, innerW);
     const xLow = margin.left + scale(d.rating_lower ?? d.rating, minRating, maxRating, 0, innerW);
     const xHigh = margin.left + scale(d.rating_upper ?? d.rating, minRating, maxRating, 0, innerW);
-    const color = getColor(d.organization || "unknown");
+    const color = getOrgColor(d.organization || "unknown");
     const org = d.organization || "unknown";
 
     // leader row gets a faint neon band so the #1 reads as the headline
@@ -907,15 +1133,25 @@ function renderLeaderboardChart(rows) {
       band.style.pointerEvents = "none";
     }
 
-    const rk = text(svg, RANK_X, y + 4, `#${formatRank(d.rank)}`, "lb-rank", "start");
+    const previous = rows[i - 1];
+    const overlapsPrevious = previous && d.rating_upper >= previous.rating_lower;
+    const rk = text(
+      svg,
+      RANK_X,
+      y + 4,
+      `#${formatRank(d.rank)}${overlapsPrevious ? " ≈" : ""}`,
+      "lb-rank",
+      "start",
+    );
     if (medalColors[i]) rk.setAttribute("fill", medalColors[i]);
     fitText(
       tagMark(text(svg, NAME_RIGHT, y + 4, d.model_name, "chart-label", "end"), { model: d.model_name, org }),
       NAME_RIGHT - NAME_LEFT_BOUND,
     );
-    tagMark(line(svg, xLow, y, xHigh, y, "", color, 2.4, "round"), { model: d.model_name, org });
-    circle(svg, xLow, y, 3, "#fff", color);
-    circle(svg, xHigh, y, 3, "#fff", color);
+    const intervalColor = "rgba(197,204,218,0.72)";
+    tagMark(line(svg, xLow, y, xHigh, y, "", intervalColor, 2.2, "round"), { model: d.model_name, org });
+    circle(svg, xLow, y, 2.6, "#d7deea", intervalColor);
+    circle(svg, xHigh, y, 2.6, "#d7deea", intervalColor);
     const dot = tagMark(
       circle(svg, x, y, scale(Math.sqrt(d.vote_count || 0), 0, Math.sqrt(maxVotes || 1), 4, 11), color, "#fff", 1.3),
       { model: d.model_name, org },
@@ -1174,7 +1410,7 @@ function drawRaceFrame() {
     present.add(d.model);
     const y = margin.top + i * rowH;
     const barW = Math.max(6, scale(d.rating, domLo, domHi, 10, innerW));
-    const color = getColor(d.org);
+    const color = getOrgColor(d.org);
     const fill = barGradient(svg, color);
     let row = race.rowEls.get(d.model);
     if (!row) {
@@ -1405,11 +1641,14 @@ function renderEvolution() {
     .filter((d) => d.arena === state.arena && d.category === state.category)
     .sort((a, b) => new Date(a.leaderboard_publish_date) - new Date(b.leaderboard_publish_date));
 
-  els.evolutionNote.textContent = `${state.arena} / ${state.category}`;
+  els.evolutionNote.textContent = `${state.arena} / ${state.category} · 当前 Top 5 · 圆点=名次变化`;
 
-  const margin = { top: 24, right: 184, bottom: 40, left: 48 };
   const width = svg.clientWidth || 1100;
-  const height = 400;
+  const compact = width < 720;
+  const margin = compact
+    ? { top: 24, right: 16, bottom: 164, left: 48 }
+    : { top: 24, right: 184, bottom: 40, left: 48 };
+  const height = compact ? 500 : 400;
   setViewBox(svg, width, height);
   clear(svg);
 
@@ -1420,8 +1659,8 @@ function renderEvolution() {
 
   const allDates = unique(allRows.map((d) => d.leaderboard_publish_date)).sort();
 
-  const selectedNames = latestNamesForEvolution(allRows).slice(0, Math.min(10, state.rankLimit));
-  const visibleNames = selectedNames.filter((n) => !state.hiddenSeries.has(n));
+  const selectedNames = latestNamesForEvolution(allRows).slice(0, Math.min(5, state.rankLimit));
+  const visibleNames = selectedNames;
 
   // trim the x-domain to where the selected (current Top) models actually have
   // data — otherwise their long pre-debut absence shows as empty space on the left
@@ -1466,55 +1705,65 @@ function renderEvolution() {
   );
   addTimeBrush(svg, { left: margin.left, top: margin.top, innerW, innerH, x0: minDate, x1: maxDate }, overlay);
 
+  const endLabels = [];
   selectedNames.forEach((name) => {
-    const hidden = state.hiddenSeries.has(name);
     const series = (byModel.get(name) || []).slice().sort(
       (a, b) => new Date(a.leaderboard_publish_date) - new Date(b.leaderboard_publish_date),
     );
-    const color = getColor(series[0]?.organization || name);
+    const color = getOrgColor(series[0]?.organization || name);
     const org = series[0]?.organization || "unknown";
-    if (!hidden && series.length) {
+    if (series.length) {
       const points = series.map((d) => [xOf(d), yOf(d), d]);
-      tagMark(path(svg, linePath(points), "", color, 2.4), { model: name, org });
-      points.forEach(([x, y, d]) => {
-        const dot = tagMark(circle(svg, x, y, 4, color, "#fff", 1.1), { model: name, org });
+      const track = tagMark(path(svg, linePath(points), "", color, 2.6), { model: name, org });
+      track.style.cursor = "pointer";
+      track.addEventListener("click", () => setFocusModel(name));
+      linkHover(track, { type: "model", value: name });
+
+      points.forEach(([x, y, d], index) => {
+        const changed = index === 0 || index === points.length - 1 || d.rank !== points[index - 1][2].rank;
+        if (!changed) return;
+        const endpoint = index === 0 || index === points.length - 1;
+        const dot = tagMark(circle(svg, x, y, endpoint ? 4 : 2.8, color, "#fff", endpoint ? 1.1 : 0.7), {
+          model: name,
+          org,
+        });
         dot.style.cursor = "pointer";
         dot.addEventListener("click", () => setFocusModel(name));
         linkHover(dot, { type: "model", value: name });
       });
+      const last = points[points.length - 1];
+      endLabels.push({ name, org, color, x: last[0], y: last[1], rank: last[2].rank });
     }
   });
 
-  // interactive legend (right column)
-  selectedNames.forEach((name, index) => {
-    const series = byModel.get(name) || allRows.filter((d) => d.model_name === name);
-    const color = getColor(series[0]?.organization || name);
-    const ly = margin.top + index * 22;
-    const hidden = state.hiddenSeries.has(name);
-    const g = svgEl("g", { class: `legend-item${hidden ? " legend-hidden" : ""}`, transform: `translate(${width - margin.right + 12}, ${ly})` });
-    tagMark(g, { model: name, org: series[0]?.organization || "unknown" });
+  endLabels.sort((a, b) => a.y - b.y);
+  let previousLabelY = -Infinity;
+  endLabels.forEach((item, index) => {
+    const labelX = compact ? margin.left + (index % 2) * Math.max(140, innerW / 2) : width - margin.right + 14;
+    const labelY = compact
+      ? height - margin.bottom + 52 + Math.floor(index / 2) * 24
+      : Math.max(item.y + 4, previousLabelY + 18);
+    previousLabelY = labelY;
+    const g = svgEl("g", {
+      class: "direct-label",
+      transform: `translate(${labelX}, ${labelY})`,
+    });
+    tagMark(g, { model: item.name, org: item.org });
     g.style.cursor = "pointer";
-    const sw = svgEl("rect", { x: 0, y: -8, width: 12, height: 12, rx: 3, fill: color });
+    const sw = svgEl("circle", { cx: 4, cy: -3, r: 4, fill: item.color });
     const tx = svgEl("text", { x: 18, y: 2, class: "legend-text" });
-    tx.textContent = truncate(name, 20);
+    tx.textContent = `#${formatRank(item.rank)} ${truncate(item.name, compact ? 14 : 20)}`;
     g.appendChild(sw);
     g.appendChild(tx);
     svg.appendChild(g);
-    g.addEventListener("click", (event) => {
-      if (event.shiftKey) {
-        setFocusModel(name);
-        return;
-      }
-      if (hidden) state.hiddenSeries.delete(name);
-      else state.hiddenSeries.add(name);
-      renderEvolution();
-      applyLinking();
-    });
-    linkHover(g, { type: "model", value: name });
+    fitText(tx, compact ? Math.max(112, innerW / 2 - 24) : margin.right - 36);
+    if (!compact) line(svg, item.x + 5, item.y, labelX - 5, labelY - 4, "", item.color, 0.8).setAttribute("opacity", 0.45);
+    g.addEventListener("click", () => setFocusModel(item.name));
+    linkHover(g, { type: "model", value: item.name });
   });
 
   drawAxisLabel(svg, margin.left, 18, "rank（越上越好）", "axis");
-  text(svg, width - margin.right + 12, margin.top - 14, "图例：点击隐藏 / Shift+点击聚焦", "minor-label");
+  if (compact) text(svg, margin.left, height - margin.bottom + 24, "点击轨迹聚焦模型", "minor-label");
 }
 
 function addEvolutionCrosshair(svg, geom, overlay) {
@@ -1573,12 +1822,30 @@ function addEvolutionCrosshair(svg, geom, overlay) {
  * ============================================================ */
 
 function renderOrganizations() {
-  const rows = data.organizations
-    .filter((d) => d.arena === state.arena)
-    .sort((a, b) => a.best_rank - b.best_rank || b.unique_models - a.unique_models)
+  const currentRows = data.latest.filter((d) => d.arena === state.arena && d.category === state.category);
+  const totalModels = Math.max(2, currentRows.length);
+  const rows = [...groupBy(currentRows, (d) => d.organization || "unknown").entries()]
+    .map(([organization, records]) => {
+      const sorted = records.slice().sort((a, b) => a.rank - b.rank);
+      const top = sorted.slice(0, 3);
+      const qualityScore = top.reduce(
+        (sum, record) => sum + 100 * (1 - (record.rank - 1) / (totalModels - 1)),
+        0,
+      ) / Math.max(1, top.length);
+      return {
+        organization,
+        unique_models: unique(records.map((record) => record.model_name)).length,
+        best_rank: sorted[0]?.rank,
+        avg_rating: records.reduce((sum, record) => sum + (record.rating || 0), 0) / records.length,
+        total_votes: records.reduce((sum, record) => sum + (record.vote_count || 0), 0),
+        quality_score: qualityScore,
+        depth_ratio: top.length / 3,
+      };
+    })
+    .sort((a, b) => b.quality_score - a.quality_score || b.unique_models - a.unique_models)
     .slice(0, 18);
 
-  els.orgScatterNote.textContent = `${rows.length} 家 · ${state.arena}`;
+  els.orgScatterNote.textContent = `${rows.length} 家 · 高度=Top-3能力百分位 · 气泡=票数 · 透明度=样本完整度`;
   els.orgBarsNote.textContent = `Top ${Math.min(12, rows.length)} / ${rows.length} 家`;
   renderOrgScatter(rows);
   renderOrgBars(rows);
@@ -1600,17 +1867,30 @@ function renderOrgScatter(rows) {
   const innerW = width - margin.left - margin.right;
   const innerH = height - margin.top - margin.bottom;
   const maxModels = max(rows, (d) => d.unique_models);
-  const maxRank = Math.max(10, max(rows, (d) => d.best_rank));
+  const minQuality = min(rows, (d) => d.quality_score);
+  const maxQuality = max(rows, (d) => d.quality_score);
+  const qualityFloor = Math.max(0, minQuality - 5);
+  const qualityCeil = Math.min(100, maxQuality + 4);
   const maxVotes = max(rows, (d) => d.total_votes);
 
   drawGrid(svg, margin, width, height, 5);
-  // y-axis: best rank #1 at the TOP so labels match the bubble positions
   for (let i = 0; i <= 5; i += 1) {
-    const value = 1 + ((maxRank - 1) / 5) * i;
-    const yTick = margin.top + scale(value, 1, maxRank, 0, innerH);
-    text(svg, margin.left - 10, yTick + 4, `#${Math.round(value)}`, "axis", "end");
+    const value = qualityFloor + ((qualityCeil - qualityFloor) / 5) * i;
+    const yTick = margin.top + scale(value, qualityFloor, qualityCeil, innerH, 0);
+    text(svg, margin.left - 10, yTick + 4, `${Math.round(value)}`, "axis", "end");
   }
   drawXAxis(svg, margin, innerW, innerH, 0, maxModels, 5, (v) => Math.round(v));
+
+  const sortedModels = rows.map((d) => d.unique_models).sort((a, b) => a - b);
+  const sortedQuality = rows.map((d) => d.quality_score).sort((a, b) => a - b);
+  const medianModels = sortedModels[Math.floor(sortedModels.length / 2)];
+  const medianQuality = sortedQuality[Math.floor(sortedQuality.length / 2)];
+  const splitX = margin.left + scale(medianModels, 0, maxModels, 0, innerW);
+  const splitY = margin.top + scale(medianQuality, qualityFloor, qualityCeil, innerH, 0);
+  line(svg, splitX, margin.top, splitX, margin.top + innerH, "quadrant-line");
+  line(svg, margin.left, splitY, margin.left + innerW, splitY, "quadrant-line");
+  text(svg, margin.left + 8, margin.top + 14, "高能力 · 专精", "quadrant-label");
+  text(svg, margin.left + innerW - 8, margin.top + 14, "高能力 · 广覆盖", "quadrant-label", "end");
 
   // brush overlay spans the WHOLE chart (not just the inner plot) so a drag can
   // start from the margins and lasso bubbles sitting right at the edges
@@ -1621,10 +1901,11 @@ function renderOrgScatter(rows) {
   const marks = rows.map((d) => {
     const org = d.organization || "unknown";
     const x = margin.left + scale(d.unique_models, 0, maxModels, 0, innerW);
-    const y = margin.top + scale(d.best_rank, 1, maxRank, 0, innerH);
+    const y = margin.top + scale(d.quality_score, qualityFloor, qualityCeil, innerH, 0);
     const r = scale(Math.sqrt(d.total_votes || 0), 0, Math.sqrt(maxVotes || 1), 7, 22);
-    const color = getColor(org);
+    const color = getOrgColor(org);
     const dot = tagMark(circle(svg, x, y, r, color, "#fff", 1.5, 0.82), { org });
+    dot.setAttribute("fill-opacity", 0.32 + d.depth_ratio * 0.58);
     dot.style.filter = `drop-shadow(0 0 4px ${color})`;
     dot.style.cursor = "pointer";
     dot.addEventListener("click", () => setFocusOrg(org));
@@ -1633,7 +1914,9 @@ function renderOrgScatter(rows) {
         event,
         `<strong>${org}</strong>模型 ${formatNumber(d.unique_models)}<br>最好名次 #${formatRank(
           d.best_rank,
-        )}<br>平均 rating ${formatDecimal(d.avg_rating)}<br>Votes ${formatNumber(d.total_votes)}<br><em>点击聚焦 · 框选多家对比</em>`,
+        )}<br>Top-3 能力分 ${formatDecimal(d.quality_score)} / 100<br>Top-3 样本 ${Math.round(
+          d.depth_ratio * 3,
+        )} / 3<br>Votes ${formatNumber(d.total_votes)}<br><em>点击聚焦 · 框选多家对比</em>`,
       ),
     );
     dot.addEventListener("mouseleave", hideTooltip);
@@ -1654,6 +1937,8 @@ function renderOrgScatter(rows) {
   const topEdge = margin.top + 4;
   const bottomEdge = margin.top + innerH + 4;
   marks
+    .sort((a, b) => a.y - b.y)
+    .slice(0, 10)
     .map((m) => {
       const onLeft = m.x > margin.left + innerW * 0.5;
       return { m, anchor: onLeft ? "end" : "start", tx: onLeft ? m.x - m.r - 7 : m.x + m.r + 7, ty: m.y + 4 };
@@ -1681,8 +1966,8 @@ function renderOrgScatter(rows) {
       placed.push({ x0, x1, ty: l.ty });
     });
 
-  drawAxisLabel(svg, margin.left + innerW / 2, height - 9, "unique models", "axis", "middle");
-  drawAxisLabel(svg, margin.left, 18, "best rank", "axis");
+  drawAxisLabel(svg, margin.left + innerW / 2, height - 9, "模型覆盖数量", "axis", "middle");
+  drawAxisLabel(svg, margin.left, 18, "Top-3 能力百分位（越上越好）", "axis");
 }
 
 function renderOrgBars(rows) {
@@ -1705,7 +1990,7 @@ function renderOrgBars(rows) {
 
   sorted.forEach((d, i) => {
     const org = d.organization || "unknown";
-    const color = getColor(org);
+    const color = getOrgColor(org);
     const y = margin.top + i * rowH;
     const barW = scale(d.unique_models, 0, maxModels, 0, innerW);
     tagMark(text(svg, margin.left - 10, y + rowH / 2 + 4, truncate(org, 16), "chart-label", "end"), { org });
@@ -2147,12 +2432,22 @@ function hideTooltip() {
   els.tooltip.style.display = "none";
 }
 
-function getColor(key) {
+function stablePaletteColor(key, colors, cache) {
   const normalized = key || "unknown";
-  if (!colorCache.has(normalized)) {
-    colorCache.set(normalized, palette[colorCache.size % palette.length]);
+  if (!cache.has(normalized)) {
+    let hash = 0;
+    for (let i = 0; i < normalized.length; i += 1) hash = (hash * 31 + normalized.charCodeAt(i)) >>> 0;
+    cache.set(normalized, colors[hash % colors.length]);
   }
-  return colorCache.get(normalized);
+  return cache.get(normalized);
+}
+
+function getOrgColor(key) {
+  return stablePaletteColor(key, palette, colorCache);
+}
+
+function getArenaColor(key) {
+  return stablePaletteColor(key, arenaPalette, arenaColorCache);
 }
 
 function varColor(name) {
