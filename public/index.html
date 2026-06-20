@@ -44,7 +44,7 @@
               <span class="filter-value">text</span>
               <i aria-hidden="true"></i>
             </button>
-            <div id="arenaMenu" class="filter-menu" role="listbox" hidden></div>
+            <div id="arenaMenu" class="filter-menu arena-menu" role="listbox" hidden></div>
             <select id="arenaSelect" class="native-control" tabindex="-1" aria-hidden="true"></select>
           </div>
           <div class="filter-field">
@@ -77,6 +77,18 @@
           </div>
         </section>
 
+        <nav class="analysis-modes" aria-label="分析任务">
+          <button class="is-active" type="button" data-analysis-mode="reliability" aria-pressed="true">
+            <strong>排名可信度</strong><span>比较评分与不确定性</span>
+          </button>
+          <button type="button" data-analysis-mode="evolution" aria-pressed="false">
+            <strong>排名演化</strong><span>追踪更替与活跃变化</span>
+          </button>
+          <button type="button" data-analysis-mode="ecosystem" aria-pressed="false">
+            <strong>机构格局</strong><span>观察能力与覆盖边界</span>
+          </button>
+        </nav>
+
         <div id="contextBar" class="context-bar" hidden></div>
 
         <section class="analysis-prompt" aria-label="分析入口">
@@ -84,7 +96,7 @@
           <strong id="analysisPrompt">当前领先是否可靠？不同任务下排名是否一致？</strong>
         </section>
 
-        <section class="spotlight" aria-label="摘要视图">
+        <section class="spotlight" aria-label="摘要视图" data-analysis-view="reliability">
           <div id="hero" class="hero">
             <article class="hero-headline">
               <span id="heroKicker" class="hero-kicker"></span>
@@ -104,7 +116,7 @@
         </section>
 
         <section class="bento" aria-label="多视图分析">
-          <article class="panel tile t-leaderboard">
+          <article class="panel tile t-leaderboard" data-analysis-view="reliability">
             <div class="panel-head">
               <h2>当前榜单与置信区间</h2>
               <span id="leaderboardNote"></span>
@@ -119,7 +131,7 @@
             </div>
           </article>
 
-          <article class="panel tile t-history">
+          <article class="panel tile t-history" data-analysis-view="evolution">
             <div class="panel-head">
               <h2>排名历史</h2>
               <div class="panel-head-actions">
@@ -164,27 +176,34 @@
             </div>
           </article>
 
-          <article class="panel tile t-timeline">
+          <article class="panel tile t-timeline" data-analysis-view="evolution">
             <div class="panel-head">
               <h2>活跃时间轴</h2>
-              <span id="timelineNote"></span>
+              <div class="panel-head-actions">
+                <span id="timelineNote"></span>
+                <div class="segmented compact" aria-label="活跃度统计尺度">
+                  <button type="button" data-activity-metric="cumulative">累计</button>
+                  <button class="is-active" type="button" data-activity-metric="monthly">月新增</button>
+                  <button type="button" data-activity-metric="growth">增长率</button>
+                </div>
+              </div>
             </div>
             <div class="chart-wrap tall">
               <svg id="timelineChart" role="img" aria-label="各 Arena 投票活跃度时间轴"></svg>
             </div>
           </article>
 
-          <article class="panel tile t-scatter">
+          <article class="panel tile t-scatter" data-analysis-view="ecosystem">
             <div class="panel-head">
-              <h2>机构位置图</h2>
+              <h2>机构能力—覆盖矩阵</h2>
               <span id="orgScatterNote"></span>
             </div>
             <div class="chart-wrap">
-              <svg id="orgScatter" role="img" aria-label="机构模型数量与平均评分散点图"></svg>
+              <svg id="orgScatter" role="img" aria-label="机构模型覆盖与Top-3能力百分位矩阵"></svg>
             </div>
           </article>
 
-          <article class="panel tile t-orgbars">
+          <article class="panel tile t-orgbars" data-analysis-view="ecosystem">
             <div class="panel-head">
               <h2>机构模型覆盖</h2>
               <span id="orgBarsNote"></span>
@@ -194,7 +213,7 @@
             </div>
           </article>
 
-          <article class="panel tile t-arena">
+          <article class="panel tile t-arena" data-analysis-view="ecosystem">
             <div class="panel-head">
               <h2>Arena 规模</h2>
               <span id="arenaScaleNote"></span>
@@ -204,7 +223,7 @@
             </div>
           </article>
 
-          <article class="panel tile t-table">
+          <article class="panel tile t-table" data-analysis-view="reliability">
             <div class="panel-head">
               <h2>榜单明细</h2>
               <span id="tableNote"></span>
