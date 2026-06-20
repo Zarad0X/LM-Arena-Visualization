@@ -108,9 +108,16 @@ function cacheElements() {
   [
     "dataStatus",
     "arenaSelect",
+    "arenaTrigger",
+    "arenaMenu",
     "categorySelect",
+    "categoryTrigger",
+    "categoryMenu",
     "organizationSelect",
+    "organizationTrigger",
+    "organizationMenu",
     "rankLimit",
+    "rankChoices",
     "modelSearch",
     "searchResults",
     "contextBar",
@@ -191,7 +198,19 @@ function bindShellEvents() {
     clearInteractionTransient();
     state.rankLimit = clamp(Number(els.rankLimit.value) || 15, 5, 50);
     els.rankLimit.value = state.rankLimit;
+    syncFilterControls();
     renderAll();
+  });
+
+  bindFilterMenu(els.arenaSelect, els.arenaTrigger, els.arenaMenu);
+  bindFilterMenu(els.categorySelect, els.categoryTrigger, els.categoryMenu);
+  bindFilterMenu(els.organizationSelect, els.organizationTrigger, els.organizationMenu);
+
+  els.rankChoices.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-rank]");
+    if (!button) return;
+    els.rankLimit.value = button.dataset.rank;
+    els.rankLimit.dispatchEvent(new Event("change"));
   });
 
   els.modelSearch.addEventListener("input", () => {
@@ -204,12 +223,16 @@ function bindShellEvents() {
     if (!els.searchResults.contains(event.target) && event.target !== els.modelSearch) {
       els.searchResults.hidden = true;
     }
+    if (!event.target.closest(".filter-field")) closeFilterMenus();
   });
 
   els.drawerClose.addEventListener("click", closeDrawer);
   els.drawerOverlay.addEventListener("click", closeDrawer);
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeDrawer();
+    if (event.key === "Escape") {
+      closeDrawer();
+      closeFilterMenus();
+    }
   });
 
   // bar-chart-race transport
@@ -271,6 +294,7 @@ function populateControls() {
   fillSelect(els.categorySelect, getCategoriesForArena(state.arena), state.category);
   populateOrganizationSelect();
   els.rankLimit.value = state.rankLimit;
+  syncFilterControls();
 }
 
 function populateOrganizationSelect() {
@@ -287,6 +311,58 @@ function populateOrganizationSelect() {
   fillSelect(els.organizationSelect, ["all", ...organizations], state.organization, (value) =>
     value === "all" ? "全部机构" : value,
   );
+  syncFilterControl(els.organizationSelect, els.organizationTrigger, els.organizationMenu);
+}
+
+function bindFilterMenu(select, trigger, menu) {
+  trigger.addEventListener("click", () => {
+    const willOpen = menu.hidden;
+    closeFilterMenus();
+    menu.hidden = !willOpen;
+    trigger.setAttribute("aria-expanded", String(willOpen));
+  });
+
+  menu.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-value]");
+    if (!option) return;
+    select.value = option.dataset.value;
+    syncFilterControl(select, trigger, menu);
+    closeFilterMenus();
+    select.dispatchEvent(new Event("change"));
+  });
+}
+
+function closeFilterMenus() {
+  [
+    [els.arenaTrigger, els.arenaMenu],
+    [els.categoryTrigger, els.categoryMenu],
+    [els.organizationTrigger, els.organizationMenu],
+  ].forEach(([trigger, menu]) => {
+    menu.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+  });
+}
+
+function syncFilterControls() {
+  syncFilterControl(els.arenaSelect, els.arenaTrigger, els.arenaMenu);
+  syncFilterControl(els.categorySelect, els.categoryTrigger, els.categoryMenu);
+  syncFilterControl(els.organizationSelect, els.organizationTrigger, els.organizationMenu);
+  els.rankChoices.querySelectorAll("[data-rank]").forEach((button) => {
+    const active = Number(button.dataset.rank) === state.rankLimit;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function syncFilterControl(select, trigger, menu) {
+  const selected = select.options[select.selectedIndex];
+  trigger.querySelector(".filter-value").textContent = selected?.textContent || "--";
+  menu.innerHTML = [...select.options]
+    .map((option) => {
+      const active = option.value === select.value;
+      return `<button type="button" role="option" data-value="${escapeHtml(option.value)}" aria-selected="${active}" class="${active ? "is-active" : ""}"><span>${escapeHtml(option.textContent)}</span><i aria-hidden="true"></i></button>`;
+    })
+    .join("");
 }
 
 function renderAll() {

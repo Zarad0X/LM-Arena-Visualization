@@ -37,23 +37,44 @@
       </header>
 
       <main>
-        <section class="toolbar panel" aria-label="全局筛选">
-          <label>
-            <span>Arena</span>
-            <select id="arenaSelect"></select>
-          </label>
-          <label>
-            <span>Category</span>
-            <select id="categorySelect"></select>
-          </label>
-          <label>
-            <span>Organization</span>
-            <select id="organizationSelect"></select>
-          </label>
-          <label>
-            <span>Rank Top</span>
-            <input id="rankLimit" type="number" min="5" max="50" step="1" />
-          </label>
+        <section class="filter-dock" aria-label="全局筛选">
+          <div class="filter-field">
+            <span class="filter-label">Arena</span>
+            <button id="arenaTrigger" class="filter-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+              <span class="filter-value">text</span>
+              <i aria-hidden="true"></i>
+            </button>
+            <div id="arenaMenu" class="filter-menu" role="listbox" hidden></div>
+            <select id="arenaSelect" class="native-control" tabindex="-1" aria-hidden="true"></select>
+          </div>
+          <div class="filter-field">
+            <span class="filter-label">Category</span>
+            <button id="categoryTrigger" class="filter-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+              <span class="filter-value">overall</span>
+              <i aria-hidden="true"></i>
+            </button>
+            <div id="categoryMenu" class="filter-menu" role="listbox" hidden></div>
+            <select id="categorySelect" class="native-control" tabindex="-1" aria-hidden="true"></select>
+          </div>
+          <div class="filter-field">
+            <span class="filter-label">Organization</span>
+            <button id="organizationTrigger" class="filter-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+              <span class="filter-value">全部机构</span>
+              <i aria-hidden="true"></i>
+            </button>
+            <div id="organizationMenu" class="filter-menu" role="listbox" hidden></div>
+            <select id="organizationSelect" class="native-control" tabindex="-1" aria-hidden="true"></select>
+          </div>
+          <div class="filter-field rank-filter">
+            <span class="filter-label">Rank Top</span>
+            <div id="rankChoices" class="rank-choices" role="group" aria-label="榜单显示数量">
+              <button type="button" data-rank="10">10</button>
+              <button type="button" data-rank="15">15</button>
+              <button type="button" data-rank="20">20</button>
+              <button type="button" data-rank="30">30</button>
+            </div>
+            <input id="rankLimit" class="native-control" type="number" min="5" max="50" step="1" tabindex="-1" aria-hidden="true" />
+          </div>
         </section>
 
         <div id="contextBar" class="context-bar" hidden></div>
