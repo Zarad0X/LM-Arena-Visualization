@@ -4,6 +4,10 @@ Visual analytics project for exploring LMArena leaderboard snapshots across
 model families, task arenas, organizations, licenses, ratings, ranks, votes, and
 uncertainty intervals.
 
+## Live Demo
+
+[Open the GitHub Pages dashboard](https://zarad0x.github.io/LM-Arena-Visualization/)
+
 ## Interaction Features (多视图协调与按需详情)
 
 The dashboard is built around a single global selection state so the views
