@@ -8,6 +8,19 @@ uncertainty intervals.
 
 [Open the GitHub Pages dashboard](https://zarad0x.github.io/LM-Arena-Visualization/)
 
+## Visual Themes
+
+The dashboard keeps one information architecture and interaction model across
+three token-driven visual themes. Use the switcher in the header or open a
+theme directly:
+
+- `?theme=current-polished` — restrained refinement of the original dark UI.
+- `?theme=research-lab` — analytical panels focused on uncertainty and comparison.
+- `?theme=terminal-analytics` — denser, low-radius leaderboard monitoring view.
+
+The selected theme is stored locally, and the URL updates when the theme changes.
+No additional frontend dependencies are required.
+
 ## Interaction Features (多视图协调与按需详情)
 
 The dashboard is built around a single global selection state so the views

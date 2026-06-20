@@ -12,7 +12,9 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%2318191d'/%3E%3Cpath d='M14 44h36M18 38l8-12 8 7 12-17' fill='none' stroke='%2331d1c0' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='46' cy='16' r='5' fill='%23ff8a5b'/%3E%3C/svg%3E"
     />
+    <script src="./theme.js"></script>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./themes.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -22,6 +24,11 @@
           <h1>LM Arena 榜单演化与机构格局</h1>
         </div>
         <div class="topbar-right">
+          <div class="theme-switcher" role="group" aria-label="视觉主题">
+            <button type="button" data-theme-option="current-polished" title="Current Polished">Polished</button>
+            <button type="button" data-theme-option="research-lab" title="Research Lab">Research</button>
+            <button type="button" data-theme-option="terminal-analytics" title="Terminal Analytics">Terminal</button>
+          </div>
           <div class="search-box">
             <input
               id="modelSearch"
@@ -118,7 +125,7 @@
         <section class="bento" aria-label="多视图分析">
           <article class="panel tile t-leaderboard" data-analysis-view="reliability">
             <div class="panel-head">
-              <h2>当前榜单与置信区间</h2>
+              <h2 data-title-key="leaderboard">当前榜单与置信区间</h2>
               <span id="leaderboardNote"></span>
             </div>
             <div class="chart-legend uncertainty-legend" aria-label="评分图图例">
@@ -133,7 +140,7 @@
 
           <article class="panel tile t-history" data-analysis-view="evolution">
             <div class="panel-head">
-              <h2>排名历史</h2>
+              <h2 data-title-key="history">排名历史</h2>
               <div class="panel-head-actions">
                 <span id="evolutionNote"></span>
                 <div class="segmented" aria-label="排名历史视图模式">
@@ -178,7 +185,7 @@
 
           <article class="panel tile t-timeline" data-analysis-view="evolution">
             <div class="panel-head">
-              <h2>活跃时间轴</h2>
+              <h2 data-title-key="activity">活跃时间轴</h2>
               <div class="panel-head-actions">
                 <span id="timelineNote"></span>
                 <div class="segmented compact" aria-label="活跃度统计尺度">
@@ -195,7 +202,7 @@
 
           <article class="panel tile t-scatter" data-analysis-view="ecosystem">
             <div class="panel-head">
-              <h2>机构能力—覆盖矩阵</h2>
+              <h2 data-title-key="organization-matrix">机构能力—覆盖矩阵</h2>
               <span id="orgScatterNote"></span>
             </div>
             <div class="chart-wrap">
@@ -205,7 +212,7 @@
 
           <article class="panel tile t-orgbars" data-analysis-view="ecosystem">
             <div class="panel-head">
-              <h2>机构模型覆盖</h2>
+              <h2 data-title-key="organization-coverage">机构模型覆盖</h2>
               <span id="orgBarsNote"></span>
             </div>
             <div class="chart-wrap">
@@ -215,7 +222,7 @@
 
           <article class="panel tile t-arena" data-analysis-view="ecosystem">
             <div class="panel-head">
-              <h2>Arena 规模</h2>
+              <h2 data-title-key="arena-scale">Arena 规模</h2>
               <span id="arenaScaleNote"></span>
             </div>
             <div class="chart-wrap">
@@ -225,7 +232,7 @@
 
           <article class="panel tile t-table" data-analysis-view="reliability">
             <div class="panel-head">
-              <h2>榜单明细</h2>
+              <h2 data-title-key="table">榜单明细</h2>
               <span id="tableNote"></span>
             </div>
             <div class="table-wrap">

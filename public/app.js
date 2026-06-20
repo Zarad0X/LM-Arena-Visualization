@@ -8,26 +8,25 @@ const DATA_PATHS = {
   profiles: "./data/model_profiles_latest.json",
 };
 
-// high-contrast neon — palette[0]/[1] mirror CSS --accent / --accent-2
-const palette = [
-  "#19f0d8",
-  "#ff6b3d",
-  "#66f08a",
-  "#b388ff",
-  "#ffcf4a",
-  "#ff5470",
-  "#3da5ff",
-  "#ff79c6",
-  "#5af0c8",
-  "#ffd93d",
-  "#33d6ff",
-  "#c77dff",
+const fallbackPalette = [
+  "#48b8ac",
+  "#cc8259",
+  "#75b88a",
+  "#8f87b5",
+  "#c7a85d",
+  "#c56875",
+  "#668fb8",
+  "#b17e9f",
+  "#62a7a4",
+  "#bca666",
+  "#5f9bac",
+  "#9188ab",
 ];
 
-const arenaPalette = [
-  "#19f0d8", "#ff8a5b", "#8ec5ff", "#c7a6ff", "#66d9a8", "#f0c66b",
-  "#70a7ff", "#ee87b7", "#74d4e8", "#d7a56d", "#8fd17f", "#9e9cff",
-  "#d28ae8", "#9aa7b8",
+const fallbackArenaPalette = [
+  "#48b8ac", "#cc8259", "#75b88a", "#8f87b5", "#c7a85d", "#c56875",
+  "#668fb8", "#b17e9f", "#62a7a4", "#bca666", "#5f9bac", "#9188ab",
+  "#a675a7", "#788590",
 ];
 
 const arenaMeta = {
@@ -93,6 +92,11 @@ const colorCache = new Map();
 const arenaColorCache = new Map();
 
 document.addEventListener("DOMContentLoaded", init);
+window.addEventListener("lmarena:themechange", () => {
+  colorCache.clear();
+  arenaColorCache.clear();
+  if (data.manifest) renderAll();
+});
 
 async function init() {
   cacheElements();
@@ -459,11 +463,25 @@ function updateAnalysisModeUi() {
   document.querySelectorAll("[data-analysis-view]").forEach((node) => {
     node.hidden = node.dataset.analysisView !== state.analysisMode;
   });
-  const questions = {
-    reliability: "当前领先是否可靠？哪些名次在统计上难以区分？",
-    evolution: "领先者何时更替？当前模型如何进入并留在头部？",
-    ecosystem: "哪些机构兼具高能力与广覆盖？不同 Arena 的竞争密度如何？",
+  const theme = window.LMArenaTheme?.current() || "current-polished";
+  const questionSets = {
+    "current-polished": {
+      reliability: "当前领先是否可靠？哪些名次在统计上难以区分？",
+      evolution: "领先者何时更替？当前模型如何进入并留在头部？",
+      ecosystem: "哪些机构兼具高能力与广覆盖？不同 Arena 的竞争密度如何？",
+    },
+    "research-lab": {
+      reliability: "Is the current leader statistically reliable, and which ranks remain indistinguishable?",
+      evolution: "When does leadership change, and which models remain stable over time?",
+      ecosystem: "How concentrated are top models, and which organizations combine breadth with capability?",
+    },
+    "terminal-analytics": {
+      reliability: "LEADER RELIABILITY / INTERVAL OVERLAP / RANK SEPARATION",
+      evolution: "RANK CHANGE / ENTRY / RETENTION",
+      ecosystem: "ORG CONCENTRATION / COVERAGE / ARENA DENSITY",
+    },
   };
+  const questions = questionSets[theme] || questionSets["current-polished"];
   els.analysisPrompt.textContent = `${state.arena} / ${state.category}：${questions[state.analysisMode]}`;
 }
 
@@ -856,7 +874,6 @@ function renderArenaBars() {
     const aBar = rect(svg, margin.left, y + 3, modelW, barH, barGradient(svg, getArenaColor(d.arena)), 4);
     aBar.classList.add("arena-scale-model-bar");
     row.appendChild(aBar);
-    if (isCurrent) aBar.style.filter = `drop-shadow(0 0 6px ${getArenaColor(d.arena)})`;
     row.appendChild(text(svg, margin.left + modelW + 8, y + 11, formatNumber(d.model_count_latest), "minor-label"));
 
     const hit = rect(svg, margin.left, y - 3, innerW, 20, "transparent", 0);
@@ -999,10 +1016,10 @@ function renderTimeline() {
     // style-control variants largely duplicate their base arena → dim by default
     const isStyle = s.arena.endsWith("_style_control");
     const dim = isStyle && !isCurrent;
-    const color = isCurrent ? getArenaColor(s.arena) : "#718096";
+    const color = isCurrent ? getArenaColor(s.arena) : varColor("--chart-context");
     const baseOpacity = isCurrent ? 1 : dim ? 0.1 : 0.25;
     const pts = s.rows.map((r) => [xOf(new Date(r.leaderboard_publish_date).getTime()), yOf(r.activity_value)]);
-    // glowing gradient area beneath the currently-focused arena's line
+    // A subtle area fill keeps the selected series readable without decorative glow.
     if (isCurrent && pts.length > 1) {
       const areaD = `${linePath(pts)} L${pts[pts.length - 1][0].toFixed(2)},${plotBottom} L${pts[0][0].toFixed(2)},${plotBottom} Z`;
       path(svg, areaD, areaGradient(svg, color), "none", 0).style.pointerEvents = "none";
@@ -1014,12 +1031,11 @@ function renderTimeline() {
     stem.setAttribute("stroke-opacity", isCurrent ? 0.7 : dim ? 0.12 : 0.3);
     stem.setAttribute("stroke-dasharray", "2 3");
     stem.style.pointerEvents = "none";
-    const startDot = circle(svg, sx, sy, isCurrent ? 4 : dim ? 2 : 2.8, color, "#0a0b0e", 1.2);
+    const startDot = circle(svg, sx, sy, isCurrent ? 4 : dim ? 2 : 2.8, color, varColor("--chart-canvas"), 1.2);
     startDot.style.pointerEvents = "none";
     if (dim) startDot.setAttribute("opacity", 0.5);
     const p = tagMark(path(svg, linePath(pts), "", color, isCurrent ? 3 : dim ? 1.1 : 1.6), { arena: s.arena });
     p.setAttribute("stroke-opacity", baseOpacity);
-    if (isCurrent) p.style.filter = `drop-shadow(0 0 6px ${color})`;
     p.style.cursor = "pointer";
     p.addEventListener("click", () => switchArena(s.arena));
     const last = s.rows[s.rows.length - 1];
@@ -1060,7 +1076,7 @@ function renderTimeline() {
     const ly = Math.max(s.endY, prevY + 12);
     prevY = ly;
     const lx = margin.left + innerW + 8;
-    circle(svg, s.endX, s.endY, s.isCurrent ? 3.5 : 2.5, s.color, "#0a0b0e", 1).setAttribute(
+    circle(svg, s.endX, s.endY, s.isCurrent ? 3.5 : 2.5, s.color, varColor("--chart-canvas"), 1).setAttribute(
       "opacity",
       s.dim ? 0.5 : 1,
     );
@@ -1117,7 +1133,7 @@ function renderLeaderboardChart(rows) {
   const RANK_X = 16;
   const NAME_RIGHT = margin.left - 14;
   const NAME_LEFT_BOUND = 66; // right edge of rank column + breathing gap
-  const medalColors = ["#ffcf4a", "#d3dae6", "#e08a52"];
+  const medalColors = [varColor("--gold"), varColor("--silver"), varColor("--bronze")];
 
   rows.forEach((d, i) => {
     const y = margin.top + i * rowH + rowH / 2;
@@ -1127,9 +1143,9 @@ function renderLeaderboardChart(rows) {
     const color = getOrgColor(d.organization || "unknown");
     const org = d.organization || "unknown";
 
-    // leader row gets a faint neon band so the #1 reads as the headline
+    // The leader row gets a restrained band so the #1 remains easy to locate.
     if (i === 0) {
-      const band = rect(svg, 6, y - rowH / 2 + 2, width - margin.right - 6, rowH - 4, "rgba(25,240,216,0.07)", 7);
+      const band = rect(svg, 6, y - rowH / 2 + 2, width - margin.right - 6, rowH - 4, varColor("--chart-band"), 5);
       band.style.pointerEvents = "none";
     }
 
@@ -1148,15 +1164,14 @@ function renderLeaderboardChart(rows) {
       tagMark(text(svg, NAME_RIGHT, y + 4, d.model_name, "chart-label", "end"), { model: d.model_name, org }),
       NAME_RIGHT - NAME_LEFT_BOUND,
     );
-    const intervalColor = "rgba(197,204,218,0.72)";
+    const intervalColor = varColor("--chart-interval");
     tagMark(line(svg, xLow, y, xHigh, y, "", intervalColor, 2.2, "round"), { model: d.model_name, org });
-    circle(svg, xLow, y, 2.6, "#d7deea", intervalColor);
-    circle(svg, xHigh, y, 2.6, "#d7deea", intervalColor);
+    circle(svg, xLow, y, 2.6, varColor("--chart-outline"), intervalColor);
+    circle(svg, xHigh, y, 2.6, varColor("--chart-outline"), intervalColor);
     const dot = tagMark(
-      circle(svg, x, y, scale(Math.sqrt(d.vote_count || 0), 0, Math.sqrt(maxVotes || 1), 4, 11), color, "#fff", 1.3),
+      circle(svg, x, y, scale(Math.sqrt(d.vote_count || 0), 0, Math.sqrt(maxVotes || 1), 4, 11), color, varColor("--chart-outline"), 1.3),
       { model: d.model_name, org },
     );
-    dot.style.filter = `drop-shadow(0 0 5px ${color})`;
     dot.style.cursor = "pointer";
     dot.addEventListener("click", () => setFocusModel(d.model_name));
     dot.addEventListener("mouseenter", (event) =>
@@ -1310,10 +1325,9 @@ const RACE_MAX = 20; // legibility cap for the race's fixed height
 function renderRace() {
   // The race depends only on arena / category / rankLimit — NOT on the org
   // filter, focus, brush, or search. Rebuilding it on those interactions
-  // cleared the drop-shadow-filtered SVG nodes mid-interaction (which left a
-  // compositor ghost) and also restarted playback. Skip the rebuild when the
-  // inputs are unchanged; applyLinking() still updates focus/dim on the
-  // existing rows, so linked highlighting keeps working without a rebuild.
+  // Rebuilding on unrelated interactions restarts playback and can leave stale
+  // animated rows. Reuse the existing race when its data inputs are unchanged;
+  // applyLinking() still updates focus and dimming in place.
   const key = `${state.arena}|${state.category}|${state.rankLimit}`;
   if (race.key === key && race.rowEls && race.rowEls.size) return;
   race.key = key;
@@ -1443,7 +1457,6 @@ function drawRaceFrame() {
     row.bar.setAttribute("width", barW);
     row.bar.setAttribute("fill", fill);
     row.bar.setAttribute("height", barH);
-    row.bar.style.filter = `drop-shadow(0 0 ${lead ? 13 : 6}px ${color})`; // leader glows hardest
     row.badge.textContent = `#${i + 1}`;
     row.badge.setAttribute("y", barH / 2 + 4);
     row.label.textContent = truncate(d.model, 24);
@@ -1499,11 +1512,10 @@ function toggleRacePlay() {
  * ============================================================ */
 
 function rankColor(rank) {
-  // 1 (strong, neon cyan) -> 60+ (weak, hot red)
   const t = clamp((rank - 1) / 59, 0, 1);
-  const a = [25, 240, 216]; // #19f0d8
-  const b = [255, 84, 112]; // #ff5470
-  const mid = [255, 207, 74]; // #ffcf4a
+  const a = colorToRgb(varColor("--accent"), [72, 184, 172]);
+  const b = colorToRgb(varColor("--danger"), [205, 100, 112]);
+  const mid = colorToRgb(varColor("--gold"), [199, 168, 93]);
   const lerp = (x, y, k) => Math.round(x + (y - x) * k);
   let c;
   if (t < 0.5) {
@@ -1723,7 +1735,7 @@ function renderEvolution() {
         const changed = index === 0 || index === points.length - 1 || d.rank !== points[index - 1][2].rank;
         if (!changed) return;
         const endpoint = index === 0 || index === points.length - 1;
-        const dot = tagMark(circle(svg, x, y, endpoint ? 4 : 2.8, color, "#fff", endpoint ? 1.1 : 0.7), {
+        const dot = tagMark(circle(svg, x, y, endpoint ? 4 : 2.8, color, varColor("--chart-outline"), endpoint ? 1.1 : 0.7), {
           model: name,
           org,
         });
@@ -1904,9 +1916,8 @@ function renderOrgScatter(rows) {
     const y = margin.top + scale(d.quality_score, qualityFloor, qualityCeil, innerH, 0);
     const r = scale(Math.sqrt(d.total_votes || 0), 0, Math.sqrt(maxVotes || 1), 7, 22);
     const color = getOrgColor(org);
-    const dot = tagMark(circle(svg, x, y, r, color, "#fff", 1.5, 0.82), { org });
+    const dot = tagMark(circle(svg, x, y, r, color, varColor("--chart-outline"), 1.5, 0.82), { org });
     dot.setAttribute("fill-opacity", 0.32 + d.depth_ratio * 0.58);
-    dot.style.filter = `drop-shadow(0 0 4px ${color})`;
     dot.style.cursor = "pointer";
     dot.addEventListener("click", () => setFocusOrg(org));
     dot.addEventListener("mouseenter", (event) =>
@@ -1961,7 +1972,7 @@ function renderOrgScatter(rows) {
       // leader line back to the bubble when the label was nudged away
       if (Math.abs(l.ty - 4 - l.m.y) > 7) {
         const edgeX = l.anchor === "end" ? l.m.x - l.m.r : l.m.x + l.m.r;
-        line(svg, edgeX, l.m.y, l.tx, l.ty - 4, "", "rgba(150,170,205,0.42)", 1).style.pointerEvents = "none";
+        line(svg, edgeX, l.m.y, l.tx, l.ty - 4, "", varColor("--chart-context"), 1).style.pointerEvents = "none";
       }
       placed.push({ x0, x1, ty: l.ty });
     });
@@ -1998,7 +2009,6 @@ function renderOrgBars(rows) {
       rect(svg, margin.left, y + rowH * 0.23, barW, Math.max(8, rowH * 0.54), barGradient(svg, color), 4),
       { org },
     );
-    bar.style.filter = `drop-shadow(0 0 5px ${color})`;
     bar.style.cursor = "pointer";
     bar.addEventListener("click", () => setFocusOrg(org));
     bar.addEventListener("mouseenter", (event) =>
@@ -2038,7 +2048,7 @@ function drawWindowBand(svg, margin, innerW, innerH, x0, x1) {
   const e = clamp(state.timeWindow.end, x0, x1);
   const xs = margin.left + scale(s, x0, x1, 0, innerW);
   const xe = margin.left + scale(e, x0, x1, 0, innerW);
-  rect(svg, xs, margin.top, Math.max(1, xe - xs), innerH, "rgba(22,105,122,0.10)", 0).classList.add("brush-band");
+  rect(svg, xs, margin.top, Math.max(1, xe - xs), innerH, varColor("--chart-brush"), 0).classList.add("brush-band");
 }
 
 function addTimeBrush(svg, geom, sharedOverlay) {
@@ -2072,7 +2082,7 @@ function addTimeBrush(svg, geom, sharedOverlay) {
 
   overlay.addEventListener("mousedown", (event) => {
     startX = clamp(pointerX(svg, event), left, left + innerW);
-    band = rect(svg, startX, top, 0, innerH, "rgba(22,105,122,0.16)", 0);
+    band = rect(svg, startX, top, 0, innerH, varColor("--chart-brush"), 0);
     band.classList.add("brush-live");
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
@@ -2139,7 +2149,7 @@ function addScatterBrush(svg, geom, sharedOverlay) {
 
   overlay.addEventListener("mousedown", (event) => {
     start = { x: cx(event), y: cy(event) };
-    box = rect(svg, start.x, start.y, 0, 0, "rgba(22,105,122,0.14)", 0);
+    box = rect(svg, start.x, start.y, 0, 0, varColor("--chart-brush"), 0);
     box.classList.add("brush-live");
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
@@ -2443,44 +2453,33 @@ function stablePaletteColor(key, colors, cache) {
 }
 
 function getOrgColor(key) {
-  return stablePaletteColor(key, palette, colorCache);
+  return stablePaletteColor(key, tokenPalette("--chart", fallbackPalette), colorCache);
 }
 
 function getArenaColor(key) {
-  return stablePaletteColor(key, arenaPalette, arenaColorCache);
+  return stablePaletteColor(key, tokenPalette("--chart", fallbackArenaPalette), arenaColorCache);
 }
 
 function varColor(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-// Mix a hex color toward white by amt (0..1) -> "rgb(...)" string.
-function lighten(hex, amt = 0.4) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
-  if (!m) return hex;
-  const n = parseInt(m[1], 16);
-  const r = (n >> 16) & 255;
-  const g = (n >> 8) & 255;
-  const b = n & 255;
-  const mix = (c) => Math.round(c + (255 - c) * amt);
-  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+function tokenPalette(prefix, fallback) {
+  return fallback.map((color, index) => varColor(`${prefix}-${index + 1}`) || color);
 }
 
-// One reusable horizontal gradient def per color (org color -> lighter tip),
-// created lazily inside the given svg's <defs>. Returns url(#id) for use as fill.
-function barGradient(svg, color) {
-  const id = `grad-${String(color).replace(/[^a-z0-9]/gi, "")}`;
-  if (svg.querySelector(`#${id}`)) return `url(#${id})`;
-  let defs = svg.querySelector("defs");
-  if (!defs) {
-    defs = svgEl("defs", {});
-    svg.insertBefore(defs, svg.firstChild);
+function colorToRgb(color, fallback) {
+  const hex = /^#([0-9a-f]{6})$/i.exec(color || "");
+  if (hex) {
+    const value = parseInt(hex[1], 16);
+    return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
   }
-  const grad = svgEl("linearGradient", { id, x1: "0", y1: "0", x2: "1", y2: "0" });
-  grad.appendChild(svgEl("stop", { offset: "0%", "stop-color": color }));
-  grad.appendChild(svgEl("stop", { offset: "100%", "stop-color": lighten(color, 0.5) }));
-  defs.appendChild(grad);
-  return `url(#${id})`;
+  const rgb = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(color || "");
+  return rgb ? rgb.slice(1, 4).map(Number) : fallback;
+}
+
+function barGradient(svg, color) {
+  return color;
 }
 
 // Vertical gradient (color -> transparent) for area fills under a line.

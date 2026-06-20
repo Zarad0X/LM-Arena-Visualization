@@ -42,6 +42,8 @@ def safe_json(text):
 def main():
     html = read(PUBLIC / "index.html")
     css = read(PUBLIC / "styles.css")
+    theme_css = read(PUBLIC / "themes.css")
+    theme_js = read(PUBLIC / "theme.js")
     js = read(PUBLIC / "app.js")
 
     # build the inlined data blocks + a bootstrap that parses them
@@ -63,6 +65,15 @@ def main():
         r'<link rel="stylesheet" href="\./styles\.css"[^>]*/>',
         f"<style>\n{css}\n</style>",
         html,
+    )
+    html = re.sub(
+        r'<link rel="stylesheet" href="\./themes\.css"[^>]*/>',
+        f"<style>\n{theme_css}\n</style>",
+        html,
+    )
+    html = html.replace(
+        '<script src="./theme.js"></script>',
+        f"<script>\n{theme_js}\n</script>",
     )
 
     # replace the external script with: data blocks + bootstrap + app.js
