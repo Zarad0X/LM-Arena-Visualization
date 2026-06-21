@@ -32,7 +32,6 @@
             />
             <div id="searchResults" class="search-results" hidden></div>
           </div>
-          <div id="dataStatus" class="status-pill">正在加载数据</div>
         </div>
       </header>
 
@@ -54,9 +53,9 @@
             <span>Rank Top</span>
             <input id="rankLimit" type="number" min="5" max="50" step="1" />
           </label>
-        </section>
 
-        <div id="contextBar" class="context-bar" hidden></div>
+          <div id="contextBar" class="context-bar" hidden></div>
+        </section>
 
         <section class="spotlight" aria-label="摘要视图">
           <div id="hero" class="hero">
@@ -169,27 +168,6 @@
             </div>
           </article>
 
-          <article class="panel tile t-table">
-            <div class="panel-head">
-              <h2>榜单明细</h2>
-              <span id="tableNote"></span>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Rank</th>
-                    <th>Model</th>
-                    <th>Organization</th>
-                    <th>Rating</th>
-                    <th>Interval</th>
-                    <th>Votes</th>
-                  </tr>
-                </thead>
-                <tbody id="leaderboardTable"></tbody>
-              </table>
-            </div>
-          </article>
         </section>
       </main>
     </div>

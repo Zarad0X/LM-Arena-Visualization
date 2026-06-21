@@ -48,7 +48,7 @@ const race = {
   frame: 0, // current index into dates
   timer: null, // setInterval handle while playing
   playing: false,
-  key: null, // "arena|category|rankLimit" of the currently-built race (rebuild guard)
+  key: null, // "arena|category|rankLimit|timeWindow" of the currently-built race
 };
 
 const data = {
@@ -87,10 +87,8 @@ async function init() {
     initializeState();
     populateControls();
     renderAll();
-    els.dataStatus.textContent = `最新快照 ${data.manifest.latest_snapshot_date}`;
   } catch (error) {
     console.error(error);
-    els.dataStatus.textContent = "数据加载失败";
     document.querySelector("main").innerHTML =
       '<section class="panel empty">无法读取 public/data 下的 JSON。请通过本地服务器打开 public/index.html。</section>';
   }
@@ -98,7 +96,6 @@ async function init() {
 
 function cacheElements() {
   [
-    "dataStatus",
     "arenaSelect",
     "categorySelect",
     "organizationSelect",
@@ -116,7 +113,6 @@ function cacheElements() {
     "arenaBars",
     "timelineChart",
     "leaderboardChart",
-    "leaderboardTable",
     "raceChart",
     "raceWatermark",
     "racePlay",
@@ -129,7 +125,6 @@ function cacheElements() {
     "arenaScaleNote",
     "timelineNote",
     "leaderboardNote",
-    "tableNote",
     "evolutionNote",
     "orgScatterNote",
     "orgBarsNote",
@@ -439,38 +434,33 @@ function closeDrawer() {
 
 function renderContextBar() {
   const chips = [];
-  chips.push(chip("Arena", state.arena, null));
-  chips.push(chip("Category", state.category, null));
-  if (state.focusArena) chips.push(chip("聚焦 Arena", state.focusArena, "focus-arena"));
-  if (state.organization !== "all") {
-    chips.push(chip("机构筛选", state.organization, "org-filter"));
-  }
-  if (state.focusModel) chips.push(chip("聚焦模型", state.focusModel, "focus-model"));
+  if (state.focusArena) chips.push(chip("Focus Arena", state.focusArena, "focus-arena"));
+  if (state.organization !== "all") chips.push(chip("Organization", state.organization, "org-filter"));
+  if (state.focusModel) chips.push(chip("Focus Model", state.focusModel, "focus-model"));
   if (state.focusOrg && state.focusOrg !== state.organization) {
-    chips.push(chip("聚焦机构", state.focusOrg, "focus-org"));
+    chips.push(chip("Focus Org", state.focusOrg, "focus-org"));
   }
   if (state.brushOrgs && state.brushOrgs.size) {
-    chips.push(chip("框选机构", `${state.brushOrgs.size} 家`, "brush-orgs"));
+    chips.push(chip("Org Brush", `${state.brushOrgs.size} orgs`, "brush-orgs"));
   }
   if (state.timeWindow) {
     chips.push(
-      chip("时间窗", `${shortDate(state.timeWindow.start)} → ${shortDate(state.timeWindow.end)}`, "time-window"),
+      chip("Time Window", `${shortDate(state.timeWindow.start)} → ${shortDate(state.timeWindow.end)}`, "time-window"),
     );
   }
-  if (state.search.trim()) chips.push(chip("搜索", state.search.trim(), "search"));
+  if (state.search.trim()) chips.push(chip("Search", state.search.trim(), "search"));
 
-  const removable = chips.some((c) => c.action);
-  els.contextBar.hidden = !removable && chips.length <= 2;
+  els.contextBar.hidden = chips.length === 0;
   els.contextBar.innerHTML =
     `<span class="context-label">联动状态</span>` +
     chips
       .map(
         (c) =>
-          `<span class="chip${c.action ? " removable" : ""}"${c.action ? ` data-action="${c.action}"` : ""}>` +
-          `<em>${escapeHtml(c.label)}</em>${escapeHtml(c.value)}${c.action ? '<button aria-label="清除">×</button>' : ""}</span>`,
+          `<span class="chip removable" data-action="${c.action}">` +
+          `<em>${escapeHtml(c.label)}</em>${escapeHtml(c.value)}<button aria-label="清除">×</button></span>`,
       )
       .join("") +
-    (removable ? `<button class="chip clear-all" data-action="clear-all">清除全部</button>` : "");
+    (chips.length ? `<button class="chip clear-all" data-action="clear-all">Clear All</button>` : "");
 
   els.contextBar.querySelectorAll("[data-action]").forEach((node) => {
     node.addEventListener("click", () => clearFilter(node.dataset.action));
@@ -578,11 +568,12 @@ function renderSearchResults() {
 function renderKpis() {
   const m = data.manifest;
   const selectedRows = getFilteredLatestRows({ respectRank: false });
+  const selectedVotes = selectedRows.reduce((sum, d) => sum + (d.vote_count || 0), 0);
   const kpis = [
     { label: "Full Rows", raw: m.full_rows },
     { label: "Latest Rows", raw: m.latest_rows },
     { label: "Arenas", raw: m.arena_count },
-    { label: "Models", raw: m.model_count_latest },
+    { label: "Selected Models", raw: selectedRows.length },
   ];
 
   if (state.timeWindow) {
@@ -595,7 +586,7 @@ function renderKpis() {
     const votes = rows.reduce((sum, d) => sum + (d.total_votes || 0), 0);
     kpis.push({ label: "窗口内 votes", text: compactNumber(votes) });
   } else {
-    kpis.push({ label: "Selected Rows", raw: selectedRows.length });
+    kpis.push({ label: "Selected Votes", text: compactNumber(selectedVotes) });
   }
 
   els.kpiGrid.innerHTML = kpis
@@ -616,13 +607,35 @@ function inWindow(time) {
   return time >= state.timeWindow.start && time <= state.timeWindow.end;
 }
 
+function constrainedOrgs() {
+  // Organization is a hard filter for current-snapshot views. A scatter brush
+  // represents a multi-org query and intentionally replaces the single-org
+  // dropdown filter.
+  if (state.brushOrgs && state.brushOrgs.size) return state.brushOrgs;
+  if (state.organization !== "all") return new Set([state.organization]);
+  return null;
+}
+
+function orgMatchesConstraint(org) {
+  const orgs = constrainedOrgs();
+  return !orgs || orgs.has(org || "unknown");
+}
+
+function constraintLabelParts({ includeTime = false } = {}) {
+  const parts = [`${state.arena} / ${state.category}`];
+  if (state.organization !== "all") parts.push(state.organization);
+  if (state.brushOrgs && state.brushOrgs.size) parts.push(`${state.brushOrgs.size} orgs`);
+  if (includeTime && state.timeWindow) parts.push(shortDate(state.timeWindow.start) + "–" + shortDate(state.timeWindow.end));
+  return parts;
+}
+
 /* ============================================================
  * Overview
  * ============================================================ */
 
 function renderOverview() {
   els.arenaScaleNote.textContent = `${data.arenaSummary.length} arenas · 点击切换`;
-  els.timelineNote.textContent = `${state.arena} / ${state.category} · ${data.manifest.date_start} ~ ${data.manifest.date_end}`;
+  els.timelineNote.textContent = `${constraintLabelParts({ includeTime: true }).join(" · ")} · ${data.manifest.date_start} ~ ${data.manifest.date_end}`;
   renderArenaBars();
   renderTimeline();
 }
@@ -857,11 +870,9 @@ function renderTimeline() {
 
 function renderLeaderboard() {
   const rows = getFilteredLatestRows({ respectRank: true });
-  els.leaderboardNote.textContent = `${state.arena} / ${state.category}`;
-  els.tableNote.textContent = `${rows.length} rows`;
+  els.leaderboardNote.textContent = `${constraintLabelParts().join(" · ")} · Top ${Math.min(state.rankLimit, rows.length)}`;
 
   renderLeaderboardChart(rows);
-  renderLeaderboardTable(rows);
 }
 
 function renderLeaderboardChart(rows) {
@@ -938,28 +949,6 @@ function renderLeaderboardChart(rows) {
   });
 }
 
-function renderLeaderboardTable(rows) {
-  els.leaderboardTable.innerHTML = rows
-    .map(
-      (d) => `<tr data-mark="1" data-model="${escapeHtml(d.model_name)}" data-org="${escapeHtml(
-        d.organization || "unknown",
-      )}">
-        <td>#${formatRank(d.rank)}</td>
-        <td>${escapeHtml(d.model_name)}</td>
-        <td>${escapeHtml(d.organization || "unknown")}</td>
-        <td>${formatDecimal(d.rating)}</td>
-        <td>${formatDecimal(d.rating_lower)} - ${formatDecimal(d.rating_upper)}</td>
-        <td>${formatNumber(d.vote_count)}</td>
-      </tr>`,
-    )
-    .join("");
-
-  els.leaderboardTable.querySelectorAll("tr").forEach((row) => {
-    row.addEventListener("click", () => setFocusModel(row.dataset.model));
-    linkHover(row, { type: "org", value: row.dataset.org });
-  });
-}
-
 /* ============================================================
  * Hero band (headline champion + podium)
  * ============================================================ */
@@ -968,6 +957,7 @@ function renderHero() {
   if (!data.manifest) return;
   const rows = data.latest
     .filter((d) => d.arena === state.arena && d.category === state.category)
+    .filter((d) => orgMatchesConstraint(d.organization || "unknown"))
     .sort((a, b) => a.rank - b.rank);
   if (!rows.length) {
     els.hero.hidden = true;
@@ -992,7 +982,7 @@ function renderHero() {
     }
   }
 
-  els.heroKicker.textContent = `当前榜首 · ${state.arena} / ${state.category}`;
+  els.heroKicker.textContent = `当前榜首 · ${constraintLabelParts().join(" · ")}`;
   els.heroChampion.innerHTML = `
     <span class="crown">👑</span>
     <span class="champ-name">${escapeHtml(champ.model_name)}</span>
@@ -1007,13 +997,12 @@ function renderHero() {
   els.heroMeta.innerHTML = [
     `${formatNumber(champ.vote_count)} votes`,
     `区间 ${formatDecimal(champ.rating_lower)}–${formatDecimal(champ.rating_upper)}`,
-    `${rows.length} 个上榜模型`,
-    `${unique(rows.map((d) => d.organization || "unknown")).length} 家机构同场`,
+    `涉及 ${unique(rows.map((d) => d.organization || "unknown")).length} 家机构`,
   ]
     .map((t) => `<span class="pill">${escapeHtml(t)}</span>`)
     .join("");
 
-  els.podiumNote.textContent = `${state.arena} / ${state.category}`;
+  els.podiumNote.textContent = constraintLabelParts().join(" · ");
   const top3 = rows.slice(0, 3);
   // visual podium order: 2nd (left) · 1st (center) · 3rd (right)
   const layout = [
@@ -1072,13 +1061,14 @@ function animateNumber(node, target, { decimals = 0, duration = 700 } = {}) {
 const RACE_MAX = 20; // legibility cap for the race's fixed height
 
 function renderRace() {
-  // The race depends only on arena / category / rankLimit — NOT on the org
-  // filter, focus, brush, or search. Rebuilding it on those interactions
+  // The race depends on arena / category / rankLimit / timeWindow — NOT on the
+  // org filter, focus, brush, or search. Rebuilding it on those interactions
   // cleared the drop-shadow-filtered SVG nodes mid-interaction (which left a
   // compositor ghost) and also restarted playback. Skip the rebuild when the
   // inputs are unchanged; applyLinking() still updates focus/dim on the
   // existing rows, so linked highlighting keeps working without a rebuild.
-  const key = `${state.arena}|${state.category}|${state.rankLimit}`;
+  const windowKey = state.timeWindow ? `${state.timeWindow.start}-${state.timeWindow.end}` : "all";
+  const key = `${state.arena}|${state.category}|${state.rankLimit}|${windowKey}`;
   if (race.key === key && race.rowEls && race.rowEls.size) return;
   race.key = key;
 
@@ -1088,12 +1078,16 @@ function renderRace() {
   race.rowEls = new Map();
   race.n = clamp(state.rankLimit, 5, RACE_MAX); // follow the "Rank Top" control
 
-  const rows = data.rankSeries.filter((d) => d.arena === state.arena && d.category === state.category);
+  const rows = data.rankSeries.filter((d) => {
+    if (d.arena !== state.arena || d.category !== state.category) return false;
+    if (!state.timeWindow) return true;
+    return inWindow(new Date(d.leaderboard_publish_date).getTime());
+  });
   if (!rows.length) {
     const width = svg.clientWidth || 1000;
     setViewBox(svg, width, 430);
     clear(svg);
-    drawEmpty(svg, width, 430, "当前筛选没有时间序列数据");
+    drawEmpty(svg, width, 430, state.timeWindow ? "时间窗内没有竞速数据" : "当前筛选没有时间序列数据");
     els.raceDate.textContent = "—";
     els.raceScrub.max = 0;
     return;
@@ -1130,6 +1124,7 @@ function renderRace() {
   els.raceScrub.max = dates.length - 1;
   els.raceScrub.value = race.frame;
   drawRaceFrame();
+  els.raceDate.title = constraintLabelParts({ includeTime: true }).join(" · ");
 }
 
 function raceGeom() {
@@ -1405,7 +1400,7 @@ function renderEvolution() {
     .filter((d) => d.arena === state.arena && d.category === state.category)
     .sort((a, b) => new Date(a.leaderboard_publish_date) - new Date(b.leaderboard_publish_date));
 
-  els.evolutionNote.textContent = `${state.arena} / ${state.category} · 圆点=名次变化 · 点击图例隐藏`;
+  els.evolutionNote.textContent = `${constraintLabelParts({ includeTime: true }).join(" · ")} · Top ${Math.min(10, state.rankLimit)} · 点击图例隐藏`;
 
   const margin = { top: 24, right: 20, bottom: 140, left: 48 };
   const width = svg.clientWidth || 1100;
@@ -1583,13 +1578,23 @@ function addEvolutionCrosshair(svg, geom, overlay) {
  * ============================================================ */
 
 function renderOrganizations() {
-  const rows = data.organizations
+  const allRows = data.organizations
     .filter((d) => d.arena === state.arena)
-    .sort((a, b) => a.best_rank - b.best_rank || b.unique_models - a.unique_models)
-    .slice(0, 18);
+    .sort((a, b) => a.best_rank - b.best_rank || b.unique_models - a.unique_models);
+  const totalOrgs = allRows.length; // real org count for this arena (un-truncated denominator)
 
-  els.orgScatterNote.textContent = `${rows.length} 家 · ${state.arena}`;
-  els.orgBarsNote.textContent = `Top ${Math.min(12, rows.length)} / ${rows.length} 家`;
+  let rows = allRows;
+  if (state.brushOrgs && state.brushOrgs.size) {
+    rows = rows.filter((d) => state.brushOrgs.has(d.organization || "unknown"));
+  } else {
+    rows = rows.slice(0, 18);
+  }
+
+  const orgNote = state.brushOrgs && state.brushOrgs.size
+    ? `${rows.length} 家框选 · ${state.arena}`
+    : `Top ${rows.length} / ${totalOrgs} 家 · ${state.arena}`;
+  els.orgScatterNote.textContent = orgNote;
+  els.orgBarsNote.textContent = `Top ${Math.min(12, rows.length)} / ${totalOrgs} 家`;
   renderOrgScatter(rows);
   renderOrgBars(rows);
 }
@@ -1865,6 +1870,8 @@ function addScatterBrush(svg, geom, sharedOverlay) {
     });
     if (!selected.size) return;
     state.brushOrgs = selected;
+    state.organization = "all";
+    els.organizationSelect.value = "all";
     state.focusOrg = null;
     state.focusModel = null;
     renderBrushOrgsDrawer(selected, rows);
@@ -1930,9 +1937,7 @@ function renderBrushOrgsDrawer(orgs, rows) {
 
 function getFilteredLatestRows({ respectRank }) {
   let rows = data.latest.filter((d) => d.arena === state.arena && d.category === state.category);
-  if (state.organization !== "all") {
-    rows = rows.filter((d) => (d.organization || "unknown") === state.organization);
-  }
+  rows = rows.filter((d) => orgMatchesConstraint(d.organization || "unknown"));
   rows = rows.sort((a, b) => a.rank - b.rank);
   return respectRank ? rows.slice(0, state.rankLimit) : rows;
 }
