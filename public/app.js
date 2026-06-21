@@ -1405,11 +1405,11 @@ function renderEvolution() {
     .filter((d) => d.arena === state.arena && d.category === state.category)
     .sort((a, b) => new Date(a.leaderboard_publish_date) - new Date(b.leaderboard_publish_date));
 
-  els.evolutionNote.textContent = `${state.arena} / ${state.category}`;
+  els.evolutionNote.textContent = `${state.arena} / ${state.category} · 圆点=名次变化 · 点击图例隐藏`;
 
-  const margin = { top: 24, right: 184, bottom: 40, left: 48 };
+  const margin = { top: 24, right: 20, bottom: 140, left: 48 };
   const width = svg.clientWidth || 1100;
-  const height = 400;
+  const height = 480;
   setViewBox(svg, width, height);
   clear(svg);
 
@@ -1476,8 +1476,11 @@ function renderEvolution() {
     if (!hidden && series.length) {
       const points = series.map((d) => [xOf(d), yOf(d), d]);
       tagMark(path(svg, linePath(points), "", color, 2.4), { model: name, org });
-      points.forEach(([x, y, d]) => {
-        const dot = tagMark(circle(svg, x, y, 4, color, "#fff", 1.1), { model: name, org });
+      points.forEach(([x, y, d], index) => {
+        const rankChanged = index === 0 || index === points.length - 1 || d.rank !== points[index - 1][2].rank;
+        if (!rankChanged) return;
+        const endpoint = index === 0 || index === points.length - 1;
+        const dot = tagMark(circle(svg, x, y, endpoint ? 4 : 3, color, "#fff", endpoint ? 1.1 : 0.8), { model: name, org });
         dot.style.cursor = "pointer";
         dot.addEventListener("click", () => setFocusModel(name));
         linkHover(dot, { type: "model", value: name });
@@ -1485,18 +1488,26 @@ function renderEvolution() {
     }
   });
 
-  // interactive legend (right column)
+  // Keep the legend below the plot so narrow dashboard columns still devote
+  // their full width to rank movement instead of squeezing the time axis.
+  const legendColumns = 2;
+  const legendRows = Math.ceil(selectedNames.length / legendColumns);
+  const legendColumnWidth = innerW / legendColumns;
+  const legendTop = height - legendRows * 18 - 10;
   selectedNames.forEach((name, index) => {
     const series = byModel.get(name) || allRows.filter((d) => d.model_name === name);
     const color = getColor(series[0]?.organization || name);
-    const ly = margin.top + index * 22;
+    const column = Math.floor(index / legendRows);
+    const row = index % legendRows;
+    const lx = margin.left + column * legendColumnWidth;
+    const ly = legendTop + row * 18;
     const hidden = state.hiddenSeries.has(name);
-    const g = svgEl("g", { class: `legend-item${hidden ? " legend-hidden" : ""}`, transform: `translate(${width - margin.right + 12}, ${ly})` });
+    const g = svgEl("g", { class: `legend-item${hidden ? " legend-hidden" : ""}`, transform: `translate(${lx}, ${ly})` });
     tagMark(g, { model: name, org: series[0]?.organization || "unknown" });
     g.style.cursor = "pointer";
     const sw = svgEl("rect", { x: 0, y: -8, width: 12, height: 12, rx: 3, fill: color });
     const tx = svgEl("text", { x: 18, y: 2, class: "legend-text" });
-    tx.textContent = truncate(name, 20);
+    tx.textContent = truncate(name, 22);
     g.appendChild(sw);
     g.appendChild(tx);
     svg.appendChild(g);
@@ -1514,7 +1525,6 @@ function renderEvolution() {
   });
 
   drawAxisLabel(svg, margin.left, 18, "rank（越上越好）", "axis");
-  text(svg, width - margin.right + 12, margin.top - 14, "图例：点击隐藏 / Shift+点击聚焦", "minor-label");
 }
 
 function addEvolutionCrosshair(svg, geom, overlay) {
@@ -1586,9 +1596,9 @@ function renderOrganizations() {
 
 function renderOrgScatter(rows) {
   const svg = setupSvg(els.orgScatter);
-  const margin = { top: 24, right: 78, bottom: 44, left: 52 };
+  const margin = { top: 52, right: 42, bottom: 44, left: 52 };
   const width = svg.clientWidth || 680;
-  const height = 360;
+  const height = 380;
   setViewBox(svg, width, height);
   clear(svg);
 
@@ -1622,7 +1632,7 @@ function renderOrgScatter(rows) {
     const org = d.organization || "unknown";
     const x = margin.left + scale(d.unique_models, 0, maxModels, 0, innerW);
     const y = margin.top + scale(d.best_rank, 1, maxRank, 0, innerH);
-    const r = scale(Math.sqrt(d.total_votes || 0), 0, Math.sqrt(maxVotes || 1), 7, 22);
+    const r = scale(Math.sqrt(d.total_votes || 0), 0, Math.sqrt(maxVotes || 1), 6, 19);
     const color = getColor(org);
     const dot = tagMark(circle(svg, x, y, r, color, "#fff", 1.5, 0.82), { org });
     dot.style.filter = `drop-shadow(0 0 4px ${color})`;
@@ -1646,39 +1656,49 @@ function renderOrgScatter(rows) {
   // the chart — both make edge bubbles easy to lasso
   addScatterBrush(svg, { bounds: { x0: 0, y0: 0, x1: width, y1: height }, marks, rows }, overlay);
 
-  // pass 2: labels. Each carries a dark halo (paint-order stroke) so it stays
-  // legible even over a bubble. We measure the real label width and push a label
-  // down only when it actually overlaps an already-placed one (both axes) — this
-  // untangles the dense rank-#1 cluster without over-separating distant labels.
+  // Pass 2: place high-signal labels first, then try positions above and below
+  // each bubble. Candidates avoid both earlier labels and unrelated bubbles,
+  // which keeps the dense best-rank cluster readable without hiding any org.
   const placed = [];
-  const topEdge = margin.top + 4;
-  const bottomEdge = margin.top + innerH + 4;
+  const topEdge = 30;
+  const bottomEdge = margin.top + innerH + 8;
+  const verticalOffsets = [0, -14, 14, -28, 28, -42, 42, -56, 56];
   marks
     .map((m) => {
       const onLeft = m.x > margin.left + innerW * 0.5;
       return { m, anchor: onLeft ? "end" : "start", tx: onLeft ? m.x - m.r - 7 : m.x + m.r + 7, ty: m.y + 4 };
     })
-    .sort((a, b) => a.ty - b.ty)
+    .sort((a, b) => b.m.r - a.m.r || a.ty - b.ty)
     .forEach((l) => {
-      const t = fitText(tagMark(text(svg, l.tx, l.ty, l.m.org, "scatter-label", l.anchor), { org: l.m.org }), 104);
+      const t = fitText(tagMark(text(svg, l.tx, l.ty, l.m.org, "scatter-label", l.anchor), { org: l.m.org }), 92);
       const w = t.getComputedTextLength();
       const x0 = l.anchor === "end" ? l.tx - w : l.tx;
       const x1 = x0 + w;
-      const overlaps = () =>
-        placed.some((p) => x0 < p.x1 + 5 && x1 > p.x0 - 5 && Math.abs(l.ty - p.ty) < 13);
-      let guard = 0;
-      while (overlaps() && l.ty < bottomEdge && guard < 60) {
-        l.ty += 4;
-        guard += 1;
-      }
-      l.ty = clamp(l.ty, topEdge, bottomEdge);
+      let best = { ty: clamp(l.ty, topEdge, bottomEdge), score: Infinity };
+      verticalOffsets.forEach((offset) => {
+        const ty = clamp(l.m.y + 4 + offset, topEdge, bottomEdge);
+        const y0 = ty - 10;
+        const y1 = ty + 4;
+        const labelHits = placed.filter((p) => x0 < p.x1 + 5 && x1 > p.x0 - 5 && y0 < p.y1 + 3 && y1 > p.y0 - 3).length;
+        const bubbleHits = marks.filter(
+          (m) =>
+            m.org !== l.m.org &&
+            x0 < m.x + m.r + 3 &&
+            x1 > m.x - m.r - 3 &&
+            y0 < m.y + m.r + 3 &&
+            y1 > m.y - m.r - 3,
+        ).length;
+        const score = labelHits * 3 + bubbleHits * 2 + Math.abs(offset) / 100;
+        if (score < best.score) best = { ty, score };
+      });
+      l.ty = best.ty;
       t.setAttribute("y", l.ty);
       // leader line back to the bubble when the label was nudged away
       if (Math.abs(l.ty - 4 - l.m.y) > 7) {
         const edgeX = l.anchor === "end" ? l.m.x - l.m.r : l.m.x + l.m.r;
         line(svg, edgeX, l.m.y, l.tx, l.ty - 4, "", "rgba(150,170,205,0.42)", 1).style.pointerEvents = "none";
       }
-      placed.push({ x0, x1, ty: l.ty });
+      placed.push({ x0, x1, y0: l.ty - 10, y1: l.ty + 4 });
     });
 
   drawAxisLabel(svg, margin.left + innerW / 2, height - 9, "unique models", "axis", "middle");
