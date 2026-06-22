@@ -4,6 +4,51 @@ Visual analytics project for exploring LMArena leaderboard snapshots across
 model families, task arenas, organizations, licenses, ratings, ranks, votes, and
 uncertainty intervals.
 
+## Environment and Startup
+
+### Required environment
+
+| Component | Version | Purpose |
+| --- | --- | --- |
+| **Node.js** | **24.14.0** | Recommended and tested runtime for serving the frontend. |
+| Python | 3.10 or newer | Required only when reproducing the data-processing pipeline. |
+| Browser | Current Chrome, Edge, Firefox, or Safari | Runs the visual analytics system. |
+
+The frontend is a static application and has no npm dependencies. If `nvm` is
+available, select the pinned Node.js version from the repository root:
+
+```bash
+nvm install
+nvm use
+node --version  # v24.14.0
+```
+
+Start the system from the repository root:
+
+```bash
+npx --yes serve@14.2.5 public -l 8000
+```
+
+Then open <http://localhost:8000/>. No backend service or database is required;
+the browser reads the processed JSON files under `public/data/`.
+
+If Node.js is unavailable, the equivalent Python static server can be used:
+
+```bash
+python3 -m http.server 8000 --directory public
+```
+
+### Optional data-processing environment
+
+Only configure this environment when the processed JSON needs to be regenerated:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
 ## Interaction Features (多视图协调与按需详情)
 
 The dashboard is built around a single global selection state so the views
@@ -86,4 +131,3 @@ docs/data-profile.md
 ```
 
 For more details, see [docs/data-processing.md](docs/data-processing.md).
-
