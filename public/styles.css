@@ -248,30 +248,6 @@ h2 {
   font-weight: 740;
 }
 
-.status-pill {
-  flex: 0 0 auto;
-  max-width: 100%;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(15, 16, 18, 0.76);
-  padding: 9px 14px;
-  color: var(--ink-dim);
-  font-size: 13px;
-  backdrop-filter: blur(8px);
-}
-
-.status-pill::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent-3);
-  box-shadow: 0 0 8px var(--accent-3);
-}
-
 /* ============================================================
  * Hero band
  * ============================================================ */
@@ -621,6 +597,16 @@ h2 {
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32);
 }
 
+.toolbar .context-bar {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 2px 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+
 label {
   display: grid;
   gap: 6px;
@@ -768,7 +754,7 @@ button:focus-visible {
   min-height: 0;
 }
 
-/* Reading order: leaderboard -> time -> race -> organizations -> records */
+/* Reading order: leaderboard -> time -> race -> organizations */
 .t-leaderboard { grid-column: span 7; }
 .t-evolution { grid-column: span 5; }
 .t-timeline { grid-column: span 7; }
@@ -776,12 +762,6 @@ button:focus-visible {
 .t-race { grid-column: span 12; } /* signature interaction — full width */
 .t-orgbars { grid-column: span 6; }
 .t-arena { grid-column: span 6; }
-.t-table { grid-column: span 12; }
-
-.t-table .table-wrap {
-  max-height: 360px;
-  overflow: auto;
-}
 
 .t-leaderboard .chart-wrap.extra-tall,
 .t-race .chart-wrap.extra-tall {
@@ -798,8 +778,7 @@ button:focus-visible {
   .t-evolution,
   .t-timeline,
   .t-race,
-  .t-arena,
-  .t-table { grid-column: span 12; }
+  .t-arena { grid-column: span 12; }
   .t-scatter,
   .t-orgbars { grid-column: span 6; }
 }
@@ -937,55 +916,6 @@ svg {
 .chart-wrap svg circle,
 .chart-wrap svg path {
   animation: mark-in 0.45s ease both;
-}
-
-/* ============================================================
- * Table
- * ============================================================ */
-.table-wrap {
-  width: 100%;
-  overflow-x: auto;
-  padding: 4px 6px 8px;
-}
-
-table {
-  width: 100%;
-  min-width: 780px;
-  border-collapse: collapse;
-}
-
-th,
-td {
-  border-bottom: 1px solid var(--line);
-  padding: 12px 14px;
-  text-align: left;
-  vertical-align: middle;
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-th {
-  position: sticky;
-  top: 0;
-  background: var(--surface-solid);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 740;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-td {
-  color: var(--ink-dim);
-}
-
-tr {
-  cursor: pointer;
-  transition: background 0.14s ease;
-}
-
-tbody tr:hover {
-  background: var(--surface-hover);
 }
 
 /* ============================================================
@@ -1141,6 +1071,10 @@ tbody tr:hover {
   backdrop-filter: blur(10px);
 }
 
+.context-bar[hidden] {
+  display: none;
+}
+
 .context-label {
   color: var(--accent);
   font-size: 11px;
@@ -1245,15 +1179,6 @@ line.is-focus {
 text.is-focus {
   fill: #fff;
   font-weight: 840;
-}
-
-tbody tr.is-focus {
-  background: rgba(var(--accent-rgb), 0.14);
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-
-tbody tr.is-dim {
-  opacity: 0.3;
 }
 
 .selected-label {
